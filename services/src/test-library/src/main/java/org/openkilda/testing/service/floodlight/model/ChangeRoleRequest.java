@@ -13,28 +13,13 @@
  *   limitations under the License.
  */
 
-package org.openkilda.testing.service.lockkeeper.model;
+package org.openkilda.testing.service.floodlight.model;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import lombok.Value;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 
-@Value
-public class InetAddress {
-
-    @JsonInclude(Include.NON_NULL)
-    String ip;
-
-    @JsonInclude(Include.NON_NULL)
-    Integer port;
-
-    public InetAddress(String ip) {
-        this.ip = ip;
-        this.port = null;
-    }
-
-    public InetAddress(Integer port) {
-        this.ip = null;
-        this.port = port;
-    }
+@Data
+@AllArgsConstructor
+public class ChangeRoleRequest {
+    ControllerRole role;
 }

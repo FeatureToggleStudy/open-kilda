@@ -11,6 +11,7 @@ import org.openkilda.messaging.info.event.IslChangeType
 import org.openkilda.messaging.info.event.SwitchChangeType
 import org.openkilda.messaging.model.system.FeatureTogglesDto
 import org.openkilda.testing.model.topology.TopologyDefinition
+import org.openkilda.testing.service.floodlight.ManagementFloodlightManager
 import org.openkilda.testing.service.labservice.LabService
 import org.openkilda.testing.service.lockkeeper.LockKeeperService
 import org.openkilda.testing.service.northbound.NorthboundService
@@ -20,6 +21,8 @@ import org.spockframework.runtime.extension.AbstractGlobalExtension
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.ApplicationContext
+
+import java.util.concurrent.TimeUnit
 
 /**
  * This extension is responsible for creating a virtual topology at the start of the test run.
@@ -38,6 +41,9 @@ class EnvExtension extends AbstractGlobalExtension implements SpringContextListe
 
     @Autowired
     LockKeeperService lockKeeper
+
+    @Autowired
+    ManagementFloodlightManager flFactory
 
     @Value('${spring.profiles.active}')
     String profile
@@ -59,6 +65,7 @@ class EnvExtension extends AbstractGlobalExtension implements SpringContextListe
         } else if (profile == "hardware") {
             labService.createHwLab(topology)
             log.info("Successfully redirected to hardware topology")
+            lockKeeper.removeFloodlightAccessRestrictions()
         } else {
             throw new RuntimeException("Provided profile '$profile' is unknown. Select one of the following profiles:" +
                     " hardware, virtual")
@@ -83,6 +90,8 @@ class EnvExtension extends AbstractGlobalExtension implements SpringContextListe
         }
         northbound.deleteAllFlows()
         labService.createLab(topology)
+        TimeUnit.SECONDS.sleep(5) //container with topology needs some time to fully start, this is async
+        flFactory.getRegions().each { lockKeeper.removeFloodlightAccessRestrictions(it) }
 
         //wait until topology is discovered
         Wrappers.wait(TOPOLOGY_DISCOVERING_TIME) {

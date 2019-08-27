@@ -107,7 +107,8 @@ class AutoRerouteSpec extends HealthCheckSpecification {
         def flowPath = PathHelper.convert(northbound.getFlowPath(flow.id))
 
         when: "An intermediate switch is disconnected"
-        lockKeeper.knockoutSwitch(findSw(flowPath[1].switchId))
+        def sw = findSw(flowPath[1].switchId)
+        def blockData = lockKeeper.knockoutSwitch(sw, mgmtFlFactory)
 
         then: "All ISLs going through the intermediate switch are 'FAILED'"
         Wrappers.wait(discoveryTimeout * 1.5 + WAIT_OFFSET) {
@@ -125,7 +126,7 @@ class AutoRerouteSpec extends HealthCheckSpecification {
         }
 
         and: "Connect the intermediate switch back and delete the flow"
-        lockKeeper.reviveSwitch(findSw(flowPath[1].switchId))
+        lockKeeper.reviveSwitch(sw, blockData)
         Wrappers.wait(WAIT_OFFSET) { assert flowPath[1].switchId in northbound.getActiveSwitches()*.switchId }
         northbound.deleteSwitchRules(flowPath[1].switchId, DeleteRulesAction.IGNORE_DEFAULTS) || true
         flowHelper.deleteFlow(flow.id)
@@ -145,7 +146,7 @@ class AutoRerouteSpec extends HealthCheckSpecification {
         flowHelper.addFlow(flow)
 
         when: "The #switchType switch is disconnected"
-        lockKeeper.knockoutSwitch(findSw(sw))
+        def blockData = lockKeeper.knockoutSwitch(findSw(sw), mgmtFlFactory)
 
         then: "The flow becomes 'Down'"
         Wrappers.wait(discoveryTimeout + rerouteDelay + WAIT_OFFSET * 2) {
@@ -153,7 +154,7 @@ class AutoRerouteSpec extends HealthCheckSpecification {
         }
 
         when: "The #switchType switch is connected back"
-        lockKeeper.reviveSwitch(findSw(sw))
+        lockKeeper.reviveSwitch(findSw(sw), blockData)
 
         then: "The flow becomes 'Up'"
         Wrappers.wait(rerouteDelay + discoveryInterval + WAIT_OFFSET) {
@@ -193,7 +194,7 @@ class AutoRerouteSpec extends HealthCheckSpecification {
         }
 
         when: "The intermediate switch is disconnected"
-        lockKeeper.knockoutSwitch(findSw(flowPath[1].switchId))
+        def blockData = lockKeeper.knockoutSwitch(findSw(flowPath[1].switchId), mgmtFlFactory)
 
         then: "The flow becomes 'Down'"
         Wrappers.wait(discoveryTimeout + rerouteDelay + WAIT_OFFSET * 2) {
@@ -206,7 +207,7 @@ class AutoRerouteSpec extends HealthCheckSpecification {
                                                   .build())
 
         and: "Connect the intermediate switch back"
-        lockKeeper.reviveSwitch(findSw(flowPath[1].switchId))
+        lockKeeper.reviveSwitch(findSw(flowPath[1].switchId), blockData)
         Wrappers.wait(WAIT_OFFSET) { assert northbound.activeSwitches*.switchId.contains(flowPath[1].switchId) }
 
         then: "The flow is #flowStatus"
@@ -319,13 +320,13 @@ class AutoRerouteSpec extends HealthCheckSpecification {
         when: "Disconnect one of the switches not used by flow"
         def involvedSwitches = pathHelper.getInvolvedSwitches(flowPath)
         def switchToDisconnect = topology.getActiveSwitches().find { !involvedSwitches.contains(it) }
-        lockKeeper.knockoutSwitch(switchToDisconnect)
+        def blockData = lockKeeper.knockoutSwitch(switchToDisconnect, mgmtFlFactory)
 
         then: "The switch is really disconnected from the controller"
         Wrappers.wait(WAIT_OFFSET) { assert !(switchToDisconnect.dpId in northbound.getActiveSwitches()*.switchId) }
 
         when: "Connect the switch back to the controller"
-        lockKeeper.reviveSwitch(switchToDisconnect)
+        lockKeeper.reviveSwitch(switchToDisconnect, blockData)
 
         then: "The switch is really connected to the controller"
         Wrappers.wait(WAIT_OFFSET) { assert switchToDisconnect.dpId in northbound.getActiveSwitches()*.switchId }

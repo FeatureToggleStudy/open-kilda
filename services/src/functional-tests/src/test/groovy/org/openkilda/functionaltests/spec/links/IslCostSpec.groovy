@@ -108,7 +108,7 @@ class IslCostSpec extends HealthCheckSpecification {
         }
 
         when: "Deactivate the switch"
-        lockKeeper.knockoutSwitch(sw)
+        def blockData = lockKeeper.knockoutSwitch(sw, mgmtFlFactory)
         Wrappers.wait(discoveryTimeout + WAIT_OFFSET) {
             assert northbound.getSwitch(sw.dpId).state == SwitchChangeType.DEACTIVATED
             def links = northbound.getAllLinks()
@@ -116,7 +116,7 @@ class IslCostSpec extends HealthCheckSpecification {
         }
 
         and: "Activate the switch"
-        lockKeeper.reviveSwitch(sw)
+        lockKeeper.reviveSwitch(sw, blockData)
         Wrappers.wait(discoveryTimeout + WAIT_OFFSET) {
             assert northbound.getSwitch(sw.dpId).state == SwitchChangeType.ACTIVATED
             def links = northbound.getAllLinks()
