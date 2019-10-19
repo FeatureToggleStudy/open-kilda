@@ -59,7 +59,7 @@ class ChaosSpec extends HealthCheckSpecification {
         }
         TimeUnit.SECONDS.sleep(rerouteDelay) //all throttled reroutes should start executing
 
-        Wrappers.wait(PATH_INSTALLATION_TIME * 3 + flowsAmount) {
+        Wrappers.wait(PATH_INSTALLATION_TIME * 3 + flowsAmount * 2, 30) {
             flows.each { flow ->
                 assert northbound.getFlowStatus(flow.id).status == FlowState.UP
                 northbound.validateFlow(flow.id).each { direction -> assert direction.asExpected }
