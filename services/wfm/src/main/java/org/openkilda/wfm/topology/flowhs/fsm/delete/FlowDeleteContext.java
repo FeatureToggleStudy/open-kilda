@@ -13,38 +13,17 @@
  *   limitations under the License.
  */
 
-package org.openkilda.wfm.share.history.model;
+package org.openkilda.wfm.topology.flowhs.fsm.delete;
 
-import lombok.AllArgsConstructor;
+import org.openkilda.floodlight.flow.response.FlowResponse;
+
 import lombok.Builder;
-import lombok.Getter;
-import lombok.Value;
+import lombok.Data;
 
-import java.time.Instant;
-
-@Value
+@Data
 @Builder
-public class FlowEventData {
+public class FlowDeleteContext {
     private String flowId;
-    private Initiator initiator;
-    private Event event;
-    private String details;
-    private Instant time;
 
-    @Getter
-    public enum Initiator {
-        NB,
-        AUTO
-    }
-
-    @AllArgsConstructor
-    @Getter
-    public enum Event {
-        CREATE("Flow creating"),
-        UPDATE("Flow updating"),
-        REROUTE("Flow rerouting"),
-        DELETE("Flow deleting");
-
-        private String description;
-    }
+    private FlowResponse flowResponse;
 }

@@ -309,6 +309,25 @@ public class FlowServiceImpl implements FlowService {
     }
 
     /**
+     * {@inheritDoc}
+     */
+    @Override
+    public CompletableFuture<FlowResponseV2> deleteFlowV2(String flowId) {
+        logger.info("Delete flow request for flow: {}", flowId);
+
+        FlowDto flow = new FlowDto();
+        flow.setFlowId(flowId);
+        CommandMessage command = new CommandMessage(new FlowDeleteRequest(flow),
+                System.currentTimeMillis(), RequestCorrelationId.getId(), Destination.WFM);
+
+        return messagingChannel.sendAndGet(flowHsTopic, command)
+                .thenApply(FlowResponse.class::cast)
+                .thenApply(FlowResponse::getPayload)
+                .thenApply(flowMapper::toFlowResponseV2);
+
+    }
+
+    /**
      * Non-blocking primitive .. just create and send delete request.
      *
      * @return the request

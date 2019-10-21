@@ -39,6 +39,7 @@ public class FlowOperationsDashboardLogger extends AbstractLogWrapper {
     private static final String PATHS_SWAP_EVENT = "paths_swap";
     private static final String REROUTE_EVENT = "flow_reroute";
     private static final String REROUTE_RESULT_EVENT = "flow_reroute_result";
+    private static final String DELETE_RESULT_EVENT = "flow_reroute_result";
     private static final String STATUS_UPDATE_EVENT = "status_update";
 
     private static final String TAG = "FLOW_OPERATIONS_DASHBOARD";
@@ -249,5 +250,18 @@ public class FlowOperationsDashboardLogger extends AbstractLogWrapper {
         data.put("reroute-result", "failed");
         data.put("failure-reason", failureReason);
         proceed(Level.WARN, String.format("Failed reroute of the flow %s, reason: %s", flowId, failureReason), data);
+    }
+
+    /**
+     * Log a flow-delete-failed event.
+     */
+    public void onFailedFlowDelete(String flowId, String failureReason) {
+        Map<String, String> data = new HashMap<>();
+        data.put(TAG, "flow-delete-failed");
+        data.put(FLOW_ID, flowId);
+        data.put(EVENT_TYPE, DELETE_RESULT_EVENT);
+        data.put("delete-result", "failed");
+        data.put("failure-reason", failureReason);
+        proceed(Level.WARN, String.format("Failed delete of the flow %s, reason: %s", flowId, failureReason), data);
     }
 }

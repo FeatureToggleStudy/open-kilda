@@ -1,13 +1,14 @@
 package org.openkilda.functionaltests.helpers
 
-import static groovyx.gpars.GParsPool.withPool
-import static org.openkilda.testing.Constants.WAIT_OFFSET
-
+import com.github.javafaker.Faker
+import groovy.util.logging.Slf4j
 import org.openkilda.functionaltests.helpers.model.SwitchPair
 import org.openkilda.messaging.payload.flow.DetectConnectedDevicesPayload
 import org.openkilda.messaging.payload.flow.FlowEndpointPayload
+import org.openkilda.messaging.payload.flow.FlowPathPayload
 import org.openkilda.messaging.payload.flow.FlowPayload
 import org.openkilda.messaging.payload.flow.FlowState
+import org.openkilda.model.Flow
 import org.openkilda.northbound.dto.v2.flows.FlowEndpointV2
 import org.openkilda.northbound.dto.v2.flows.FlowRequestV2
 import org.openkilda.northbound.dto.v2.flows.FlowResponseV2
@@ -16,14 +17,15 @@ import org.openkilda.testing.model.topology.TopologyDefinition.Switch
 import org.openkilda.testing.service.database.Database
 import org.openkilda.testing.service.northbound.NorthboundService
 import org.openkilda.testing.service.northbound.NorthboundServiceV2
-
-import com.github.javafaker.Faker
-import groovy.util.logging.Slf4j
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Component
 import org.springframework.web.client.HttpClientErrorException
 
 import java.text.SimpleDateFormat
+
+import static groovyx.gpars.GParsPool.withPool
+import static org.openkilda.testing.Constants.RULES_DELETION_TIME
+import static org.openkilda.testing.Constants.WAIT_OFFSET
 
 /**
  * Holds utility methods for manipulating flows supporting version 2 of API.
@@ -146,6 +148,26 @@ class FlowHelperV2 {
     }
 
     /**
+     * Deletes flow with checking rules on source and destination switches.
+     * It is supposed if rules absent on source and destination switches, the flow is completely deleted.
+     */
+    FlowResponseV2 deleteFlow(String flowId) {
+        Wrappers.wait(WAIT_OFFSET) { assert northbound.getFlowStatus(flowId).status != FlowState.IN_PROGRESS }
+
+        def flowEntry = db.getFlow(flowId)
+        def flowPath = northbound.getFlowPath(flowId)
+
+        log.debug("Deleting flow '$flowId'")
+        def response = northboundV2.deleteFlow(flowId)
+
+        Wrappers.wait(WAIT_OFFSET) { assert !northbound.getFlowStatus(flowId) }
+
+        checkRulesOnSwitches(flowEntry, flowPath, RULES_DELETION_TIME, false)
+
+        return response
+    }
+
+    /**
      * Check whether given potential flow is conflicting with any of flows in the given list.
      * Usually used to ensure that some new flow is by accident is not conflicting with any of existing flows.
      * Verifies conflicts by flow id and by port-vlan conflict on source or destination switch.
@@ -169,8 +191,13 @@ class FlowHelperV2 {
      */
     void checkRulesOnSwitches(String flowId, int timeout, boolean rulesPresent) {
         def flowEntry = db.getFlow(flowId)
+        def flowPath = northbound.getFlowPath(flowEntry.flowId)
+        checkRulesOnSwitches(flowEntry, flowPath, timeout, rulesPresent);
+    }
+
+    void checkRulesOnSwitches(Flow flowEntry, FlowPathPayload flowPath, int timeout, boolean rulesPresent) {
         def cookies = [flowEntry.forwardPath.cookie.value, flowEntry.reversePath.cookie.value]
-        def switches = PathHelper.convert(northbound.getFlowPath(flowEntry.flowId))*.switchId.toSet()
+        def switches = PathHelper.convert(flowPath)*.switchId.toSet()
         withPool {
             switches.eachParallel { sw ->
                 Wrappers.wait(timeout) {
