@@ -123,6 +123,19 @@ class SwitchesSpec extends HealthCheckSpecification {
         getSwitchFlowsResponse4.size() == 1
         getSwitchFlowsResponse4[0].id == protectedFlow.id
 
+        when: "Create default flow on the same switches"
+        def defaultFlow = flowHelper.randomFlow(switchPair)
+        defaultFlow.source.vlanId = 0
+        defaultFlow.destination.vlanId = 0
+        flowHelper.addFlow(defaultFlow)
+
+        and: "Get all flows going through the src switch"
+        def getSwitchFlowsResponse5 = northbound.getSwitchFlows(switchPair.src.dpId)
+
+        then: "The created flows are in the response list"
+        getSwitchFlowsResponse5.size() == 3
+        getSwitchFlowsResponse5*.id.sort() == [protectedFlow.id, singleFlow.id, defaultFlow.id].sort()
+
         when: "All alternative paths are unavailable (bring ports down on the srcSwitch)"
         List<PathNode> broughtDownPorts = []
         switchPair.paths.findAll { it != pathHelper.convert(northbound.getFlowPath(protectedFlow.id)) }.unique {
@@ -140,11 +153,11 @@ class SwitchesSpec extends HealthCheckSpecification {
 
         and: "Get all flows going through the src switch"
         Wrappers.wait(WAIT_OFFSET) { assert northbound.getFlowStatus(protectedFlow.id).status == FlowState.DOWN }
-        def getSwitchFlowsResponse5 = northbound.getSwitchFlows(switchPair.src.dpId)
+        def getSwitchFlowsResponse6 = northbound.getSwitchFlows(switchPair.src.dpId)
 
         then: "The created flows are in the response list"
-        getSwitchFlowsResponse5.size() == 2
-        getSwitchFlowsResponse5*.id.sort() == [protectedFlow.id, singleFlow.id].sort()
+        getSwitchFlowsResponse6.size() == 3
+        getSwitchFlowsResponse6*.id.sort() == [protectedFlow.id, singleFlow.id].sort()
 
         and: "Cleanup: Delete the flows"
         broughtDownPorts.every { antiflap.portUp(it.switchId, it.portNo) }
