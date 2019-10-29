@@ -29,6 +29,7 @@ import org.openkilda.messaging.command.apps.FlowRemoveAppRequest;
 import org.openkilda.messaging.command.flow.InstallEgressFlow;
 import org.openkilda.messaging.command.flow.InstallIngressFlow;
 import org.openkilda.messaging.command.flow.UpdateIngressAndEgressFlows;
+import org.openkilda.messaging.command.flow.UpdateOneSwitchFlows;
 import org.openkilda.messaging.command.switches.InstallExclusionRequest;
 import org.openkilda.messaging.command.switches.RemoveExclusionRequest;
 import org.openkilda.messaging.info.apps.AppsEntry;
@@ -212,7 +213,11 @@ public class AppsManagerService {
     }
 
     private void sendUpdateFlowEndpointRulesCommand(Flow flow) throws SwitchPropertiesNotFoundException {
-        carrier.emitSpeakerCommand(buildUpdateFlowEndpointRulesCommand(flow));
+        if (!flow.isOneSwitchFlow()) {
+            carrier.emitSpeakerCommand(buildUpdateFlowEndpointRulesCommand(flow));
+        } else {
+            carrier.emitSpeakerCommand(buildUpdateOneSwitchRulesCommand(flow));
+        }
     }
 
     private UpdateIngressAndEgressFlows buildUpdateFlowEndpointRulesCommand(Flow flow)
@@ -271,6 +276,20 @@ public class AppsManagerService {
         if (segments.isEmpty()) {
             throw new IllegalArgumentException("Neither one switch flow nor path segments provided");
         }
+    }
+
+    private UpdateOneSwitchFlows buildUpdateOneSwitchRulesCommand(Flow flow) throws SwitchPropertiesNotFoundException {
+        SwitchId switchId = flow.getSrcSwitch().getSwitchId();
+        SwitchProperties switchProperties = switchPropertiesRepository.findBySwitchId(switchId)
+                .orElseThrow(() -> new SwitchPropertiesNotFoundException(switchId));
+        Objects.requireNonNull(switchProperties.getTelescopePort(),
+                format("Telescope port for switch '%s' is not set", switchId));
+
+        Cookie cookie = flow.getForwardPath().getCookie();
+        Cookie telescopeCookie = Cookie.buildTelescopeCookie(cookie.getUnmaskedValue(), cookie.isMaskedAsForward());
+        return new UpdateOneSwitchFlows(flowCommandFactory.makeOneSwitchRule(flow, flow.getForwardPath()),
+                flowCommandFactory.makeOneSwitchRule(flow, flow.getReversePath()), switchProperties.getTelescopePort(),
+                telescopeCookie.getValue());
     }
 
     /**

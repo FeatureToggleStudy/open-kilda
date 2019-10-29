@@ -253,6 +253,7 @@ public interface ISwitchManager extends IFloodlightService {
      * @param outputVlanType type of action to apply to the outputVlanId if greater than 0
      * @param encapsulationType flow encapsulation type
      * @param multiTable multitable pipeline flag
+     * @param applications flow applications
      * @return transaction id
      * @throws SwitchOperationException Switch not found
      */
@@ -291,13 +292,13 @@ public interface ISwitchManager extends IFloodlightService {
      * @param outputVlanType type of action to apply to the outputVlanId if greater than 0
      * @param enableLldp     if True LLDP packets will be send to LLDP rule
      * @param multiTable multitable pipeline flag
+     * @param applications flow applications
      * @return transaction id
      * @throws SwitchOperationException Switch not found
      */
-    long installOneSwitchFlow(final DatapathId dpid, final String flowId, final Long cookie,
-                                                      final int inputPort, final int outputPort, int inputVlanId,
-                                                      int outputVlanId, final OutputVlanType outputVlanType,
-                                                      final long meterId, boolean enableLldp, boolean multiTable)
+    long installOneSwitchFlow(DatapathId dpid, String flowId, Long cookie, int inputPort, int outputPort,
+                              int inputVlanId, int outputVlanId, OutputVlanType outputVlanType, long meterId,
+                              boolean enableLldp, boolean multiTable, Set<FlowApplication> applications)
             throws SwitchOperationException;
 
     /**

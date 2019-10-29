@@ -655,7 +655,7 @@ public class SwitchManagerTest {
 
         switchManager.installOneSwitchFlow(dpid, cookieHex, cookie,
                 inputPort, outputPort, inputVlanId, outputVlanId, OutputVlanType.REPLACE, meterId, false,
-                false);
+                false, new HashSet<>());
 
         assertEquals(
                 scheme.oneSwitchReplaceFlowMod(inputPort, outputPort, inputVlanId, outputVlanId, meterId, cookie),
@@ -668,7 +668,7 @@ public class SwitchManagerTest {
 
         switchManager.installOneSwitchFlow(dpid, cookieHex, cookie,
                 inputPort, outputPort, 0, outputVlanId, OutputVlanType.PUSH, meterId, false,
-                false);
+                false, new HashSet<>());
 
         assertEquals(
                 scheme.oneSwitchPushFlowMod(inputPort, outputPort, outputVlanId, meterId, cookie),
@@ -681,7 +681,7 @@ public class SwitchManagerTest {
 
         switchManager.installOneSwitchFlow(dpid, cookieHex, cookie,
                 inputPort, outputPort, inputVlanId, 0, OutputVlanType.POP, meterId, false,
-                false);
+                false, new HashSet<>());
 
         assertEquals(
                 scheme.oneSwitchPopFlowMod(inputPort, outputPort, inputVlanId, meterId, cookie),
@@ -694,7 +694,7 @@ public class SwitchManagerTest {
 
         switchManager.installOneSwitchFlow(dpid, cookieHex, cookie,
                 inputPort, outputPort, 0, 0, OutputVlanType.NONE, meterId, false,
-                false);
+                false, new HashSet<>());
 
         assertEquals(
                 scheme.oneSwitchNoneFlowMod(inputPort, outputPort, meterId, cookie),
@@ -706,7 +706,7 @@ public class SwitchManagerTest {
         Capture<OFFlowMod> capture = prepareForInstallTest(true);
 
         switchManager.installOneSwitchFlow(dpid, cookieHex, cookie,
-                inputPort, outputPort, 0, 0, OutputVlanType.NONE, meterId, false, false);
+                inputPort, outputPort, 0, 0, OutputVlanType.NONE, meterId, false, false, new HashSet<>());
 
         final OFFlowMod actual = capture.getValue();
         assertThat(actual.getFlags().isEmpty(), is(true));

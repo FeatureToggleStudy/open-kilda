@@ -388,8 +388,8 @@ public class FlowCommandFactory {
         Long meterId = Optional.ofNullable(flowPath.getMeterId()).map(MeterId::getValue).orElse(null);
         return new InstallOneSwitchFlow(transactionIdGenerator.generate(),
                 flow.getFlowId(), flowPath.getCookie().getValue(), switchId, inPort,
-                outPort, inVlan, outVlan,
-                getOutputVlanType(flow, flowPath), flow.getBandwidth(), meterId, false, enableLldp);
+                outPort, inVlan, outVlan, getOutputVlanType(flow, flowPath), flow.getBandwidth(), meterId,
+                false, enableLldp, flowPath.getApplications());
     }
 
     private OutputVlanType getOutputVlanType(Flow flow, FlowPath flowPath) {

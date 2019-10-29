@@ -73,6 +73,7 @@ import org.openkilda.messaging.command.flow.ReinstallDefaultFlowForSwitchManager
 import org.openkilda.messaging.command.flow.RemoveFlow;
 import org.openkilda.messaging.command.flow.RemoveFlowForSwitchManagerRequest;
 import org.openkilda.messaging.command.flow.UpdateIngressAndEgressFlows;
+import org.openkilda.messaging.command.flow.UpdateOneSwitchFlows;
 import org.openkilda.messaging.command.switches.ConnectModeRequest;
 import org.openkilda.messaging.command.switches.DeleteRulesAction;
 import org.openkilda.messaging.command.switches.DeleteRulesCriteria;
@@ -252,6 +253,8 @@ class RecordHandler implements Runnable {
             doAliveRequest(message);
         } else if (data instanceof UpdateIngressAndEgressFlows) {
             doProcessUpdateIngressAndEgressFlows(message);
+        } else if (data instanceof UpdateOneSwitchFlows) {
+            doProcessUpdateOneSwitchFlows(message);
         } else if (data instanceof InstallExclusionRequest) {
             doInstallExclusion(message);
         } else if (data instanceof RemoveExclusionRequest) {
@@ -452,6 +455,53 @@ class RecordHandler implements Runnable {
         return removeCommand.build();
     }
 
+    private void doProcessUpdateOneSwitchFlows(CommandMessage message) {
+        UpdateOneSwitchFlows commandData = (UpdateOneSwitchFlows) message.getData();
+        InstallOneSwitchFlow forwardOneSwitchFlowCommand = commandData.getForwardOneSwitchFlow();
+        InstallOneSwitchFlow reverseOneSwitchFlowCommand = commandData.getReverseOneSwitchFlow();
+        int telescopePort = commandData.getTelescopePort();
+        long telescopeCookie = commandData.getTelescopeCookie();
+
+        logger.info("Updating one switch flows with ID '{}' on switch '{}'",
+                forwardOneSwitchFlowCommand.getId(), forwardOneSwitchFlowCommand.getSwitchId());
+
+        DatapathId dpid = DatapathId.of(forwardOneSwitchFlowCommand.getSwitchId().toLong());
+
+        RemoveFlow removeForwardFlow = buildRemoveOneSwitchFlowCommand(forwardOneSwitchFlowCommand, "UPDATE_FORWARD");
+        RemoveFlow removeReverseFlow = buildRemoveOneSwitchFlowCommand(reverseOneSwitchFlowCommand, "UPDATE_REVERSE");
+        try {
+            processDeleteFlow(removeForwardFlow, dpid);
+            processDeleteFlow(removeReverseFlow, dpid);
+
+            installOneSwitchFlow(forwardOneSwitchFlowCommand);
+            installOneSwitchFlow(reverseOneSwitchFlowCommand);
+
+            processApplications(forwardOneSwitchFlowCommand.getApplications(), dpid, telescopeCookie,
+                    0, telescopePort);
+        } catch (SwitchOperationException e) {
+            logger.error("Updating rule with cookie = {} and rule with cookie = {} was unsuccessful",
+                    forwardOneSwitchFlowCommand.getCookie(), reverseOneSwitchFlowCommand.getCookie(), e);
+        }
+    }
+
+    private RemoveFlow buildRemoveOneSwitchFlowCommand(InstallOneSwitchFlow command, String flowId) {
+        DeleteRulesCriteria criteria = DeleteRulesCriteria.builder()
+                .cookie(command.getCookie())
+                .inPort(command.getInputPort())
+                .outPort(command.getOutputPort())
+                .build();
+
+        return RemoveFlow.builder()
+                .transactionId(UUID.randomUUID())
+                .flowId(flowId)
+                .cookie(command.getCookie())
+                .criteria(criteria)
+                .multiTable(command.isMultiTable())
+                .switchId(command.getSwitchId())
+                .meterId(command.getMeterId())
+                .build();
+    }
+
     private void processApplications(Set<FlowApplication> applications, DatapathId dpid, long telescopeCookie,
                                      int tunnelId, int telescopePort) throws SwitchOperationException {
         if (applications != null && applications.contains(FlowApplication.TELESCOPE)) {
@@ -618,7 +668,8 @@ class RecordHandler implements Runnable {
                 directOutputVlanType,
                 meterId,
                 command.isEnableLldp(),
-                command.isMultiTable());
+                command.isMultiTable(),
+                command.getApplications());
 
     }
 

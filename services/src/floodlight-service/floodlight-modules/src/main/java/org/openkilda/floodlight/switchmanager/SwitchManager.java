@@ -639,7 +639,8 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
     @Override
     public long installOneSwitchFlow(DatapathId dpid, String flowId, Long cookie, int inputPort, int outputPort,
                                      int inputVlanId, int outputVlanId, OutputVlanType outputVlanType, long meterId,
-                                     boolean enableLldp, boolean multiTable) throws SwitchOperationException {
+                                     boolean enableLldp, boolean multiTable, Set<FlowApplication> applications)
+            throws SwitchOperationException {
         // TODO: As per other locations, how different is this to IngressFlow? Why separate code path?
         //          As with any set of tests, the more we test the same code path, the better.
         //          Based on brief glance, this looks 90% the same as IngressFlow.
@@ -667,7 +668,7 @@ public class SwitchManager implements IFloodlightModule, IFloodlightService, ISw
 
         int flowPriority = getFlowPriority(inputVlanId);
         List<OFInstruction> instructions = createIngressFlowInstructions(ofFactory, meter, actions, enableLldp, 0,
-                new HashSet<>());
+                applications);
 
         // build FLOW_MOD command with meter
 
