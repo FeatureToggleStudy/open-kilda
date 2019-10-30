@@ -130,6 +130,78 @@ class DefaultRulesSpec extends HealthCheckSpecification {
     }
 
     @Unroll
+    @Tags([TOPOLOGY_DEPENDENT, SMOKE_SWITCHES])
+    def "Able to install default multitable rule on an #sw.ofVersion \
+switch(#sw.dpId, install-action=#data.installRulesAction)"(Map data, Switch sw) {
+        setup: "Enabled multitable switch property on a switch(if it is not enabled yet)"
+        def initSwitchProperty = northbound.getSwitchProperties(sw.dpId)
+        def multitableIsEnabled = initSwitchProperty.multiTable
+        multitableIsEnabled ?: northbound.updateSwitchProperties(multiTable: true)
+
+        and: "Delete all rules"
+        def defaultRules = northbound.getSwitchRules(sw.dpId).flowEntries
+        assert defaultRules*.cookie.sort() == sw.defaultCookies.sort()
+
+        northbound.deleteSwitchRules(sw.dpId, DeleteRulesAction.DROP_ALL)
+        Wrappers.wait(RULES_DELETION_TIME) { assert northbound.getSwitchRules(sw.dpId).flowEntries.empty }
+
+        when: "Install rules on the switch"
+        def installedRules = northbound.installSwitchRules(sw.dpId, data.installRulesAction)
+
+        then: "The corresponding rules are really installed"
+        installedRules.size() == 1
+
+        def expectedRules = defaultRules.findAll { it.cookie == data.cookie }
+        Wrappers.wait(RULES_INSTALLATION_TIME) {
+            compareRules(northbound.getSwitchRules(sw.dpId).flowEntries, expectedRules)
+        }
+
+        and: "Install missing default rules and restore switch properties"
+        multitableIsEnabled ?: northbound.updateSwitchProperties(sw.dpId, initSwitchProperty)
+        northbound.installSwitchRules(sw.dpId, InstallRulesAction.INSTALL_DEFAULTS)
+        Wrappers.wait(RULES_INSTALLATION_TIME) {
+            assert northbound.getSwitchRules(sw.dpId).flowEntries.size() == defaultRules.size()
+        }
+
+        where:
+        [data, sw] << [
+                [
+                        [
+                                installRulesAction: InstallRulesAction.INSTALL_MULTITABLE_PRE_INGRESS_PASS_THROUGH,
+                                cookie            : Cookie.MULTITABLE_PRE_INGRESS_PASS_THROUGH_COOKIE
+                        ],
+                        [
+                                installRulesAction: InstallRulesAction.INSTALL_MULTITABLE_INGRESS_DROP,
+                                cookie            : Cookie.MULTITABLE_INGRESS_DROP_COOKIE
+                        ],
+                        [
+                                installRulesAction: InstallRulesAction.INSTALL_MULTITABLE_POST_INGRESS_DROP,
+                                cookie            : Cookie.MULTITABLE_POST_INGRESS_DROP_COOKIE
+                        ],
+                        [
+                                installRulesAction: InstallRulesAction.INSTALL_MULTITABLE_EGRESS_PASS_THROUGH,
+                                cookie            : Cookie.MULTITABLE_EGRESS_PASS_THROUGH_COOKIE
+                        ],
+                        [
+                                installRulesAction: InstallRulesAction.INSTALL_MULTITABLE_TRANSIT_DROP,
+                                cookie            : Cookie.MULTITABLE_TRANSIT_DROP_COOKIE
+                        ]
+                ],
+                getTopology().getActiveSwitches().unique { activeSw -> activeSw.description }
+        ].combinations()
+                .findAll { dataPiece, theSw ->
+                    //OF_12 has only broadcast rule, so filter out all other combinations for OF_12
+                    !(theSw.ofVersion == "OF_12" && dataPiece.installRulesAction != InstallRulesAction.INSTALL_BROADCAST) &&
+                            //BFD, Round Trip and VXlan are available only on Noviflow
+                            !(!theSw.noviflow && dataPiece.installRulesAction in [InstallRulesAction.INSTALL_BFD_CATCH,
+                                                                                  InstallRulesAction.INSTALL_ROUND_TRIP_LATENCY,
+                                                                                  InstallRulesAction.INSTALL_UNICAST_VXLAN])
+                    //having broadcast rule with 'drop loop' rule on WB5164 will lead to packet storm. See #2595
+                    !(!theSw.wb5164 && dataPiece.installRulesAction == InstallRulesAction.INSTALL_BROADCAST)
+                }
+    }
+
+    @Unroll
     @Tags([TOPOLOGY_DEPENDENT, SMOKE, SMOKE_SWITCHES])
     def "Able to install default rules on an #sw.ofVersion switch(#sw.dpId, install-action=INSTALL_DEFAULTS)"() {
         given: "A switch without any rules"
@@ -216,6 +288,81 @@ class DefaultRulesSpec extends HealthCheckSpecification {
             !(theSw.ofVersion == "OF_12" && dataPiece.cookie != Cookie.VERIFICATION_BROADCAST_RULE_COOKIE) &&
                     //dropping this rule on WB5164 will lead to disco-packet storm. Reason: #2595
             !(theSw.wb5164 && dataPiece.cookie == Cookie.DROP_VERIFICATION_LOOP_RULE_COOKIE)
+        }
+    }
+
+    @Unroll
+    @Tags([TOPOLOGY_DEPENDENT, SMOKE_SWITCHES])
+    def "Able to delete default multitable rule from an #sw.ofVersion \
+switch (#sw.dpId, delete-action=#data.deleteRulesAction)"(Map data, Switch sw) {
+        setup: "Enabled multitable switch property on a switch(if it is not enabled yet)"
+        def initSwitchProperty = northbound.getSwitchProperties(sw.dpId)
+        def multitableIsEnabled = initSwitchProperty.multiTable
+        multitableIsEnabled ?: northbound.updateSwitchProperties(multiTable: true)
+
+        when: "Delete rule from the switch"
+        def defaultRules = northbound.getSwitchRules(sw.dpId).flowEntries
+        assert defaultRules*.cookie.sort() == sw.defaultCookies.sort()
+        def deletedRules = northbound.deleteSwitchRules(sw.dpId, data.deleteRulesAction)
+
+        then: "The corresponding rule is really deleted"
+        deletedRules.size() == 1
+        Wrappers.wait(RULES_DELETION_TIME) {
+            def actualRules = northbound.getSwitchRules(sw.dpId).flowEntries
+            assert actualRules.findAll { it.cookie in deletedRules }.empty
+            compareRules(actualRules, defaultRules.findAll { it.cookie != data.cookie })
+        }
+
+        and: "Switch and rules validation shows that corresponding default rule is missing"
+        verifyAll(northbound.validateSwitchRules(sw.dpId)) {
+            missingRules == deletedRules
+            excessRules.empty
+            properRules.sort() == sw.defaultCookies.findAll { it != data.cookie }.sort()
+        }
+        verifyAll(northbound.validateSwitch(sw.dpId)) {
+            rules.missing == deletedRules
+            rules.misconfigured.empty
+            rules.excess.empty
+            rules.proper.sort() == sw.defaultCookies.findAll { it != data.cookie }.sort()
+        }
+
+        and: "Install default rules back"
+        multitableIsEnabled ?: northbound.updateSwitchProperties(sw.dpId, initSwitchProperty)
+        northbound.installSwitchRules(sw.dpId, InstallRulesAction.INSTALL_DEFAULTS)
+        Wrappers.wait(RULES_INSTALLATION_TIME) {
+            assert northbound.getSwitchRules(sw.dpId).flowEntries.size() == defaultRules.size()
+        }
+
+        where:
+        [data, sw] << [
+                [
+                        [
+                                deleteRulesAction: DeleteRulesAction.REMOVE_MULTITABLE_PRE_INGRESS_PASS_THROUGH,
+                                cookie           : Cookie.MULTITABLE_PRE_INGRESS_PASS_THROUGH_COOKIE
+                        ],
+                        [
+                                deleteRulesAction: DeleteRulesAction.REMOVE_MULTITABLE_INGRESS_DROP,
+                                cookie           : Cookie.MULTITABLE_INGRESS_DROP_COOKIE
+                        ],
+                        [
+                                deleteRulesAction: DeleteRulesAction.REMOVE_MULTITABLE_POST_INGRESS_DROP,
+                                cookie           : Cookie.MULTITABLE_POST_INGRESS_DROP_COOKIE
+                        ],
+                        [
+                                deleteRulesAction: DeleteRulesAction.REMOVE_MULTITABLE_EGRESS_PASS_THROUGH,
+                                cookie           : Cookie.MULTITABLE_EGRESS_PASS_THROUGH_COOKIE
+                        ],
+                        [
+                                deleteRulesAction: DeleteRulesAction.REMOVE_MULTITABLE_TRANSIT_DROP,
+                                cookie           : Cookie.MULTITABLE_TRANSIT_DROP_COOKIE
+                        ]
+                ],
+                getTopology().getActiveSwitches().unique { activeSw -> activeSw.description }
+        ].combinations().findAll { dataPiece, theSw ->
+            //OF_12 switches has only one broadcast rule, so not all iterations will be applicable
+            !(theSw.ofVersion == "OF_12" && dataPiece.cookie != Cookie.VERIFICATION_BROADCAST_RULE_COOKIE) &&
+                    //dropping this rule on WB5164 will lead to disco-packet storm. Reason: #2595
+                    !(theSw.wb5164 && dataPiece.cookie == Cookie.DROP_VERIFICATION_LOOP_RULE_COOKIE)
         }
     }
 
