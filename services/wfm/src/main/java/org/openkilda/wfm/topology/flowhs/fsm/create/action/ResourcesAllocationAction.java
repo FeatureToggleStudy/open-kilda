@@ -53,7 +53,7 @@ import org.openkilda.wfm.share.history.model.FlowHistoryData;
 import org.openkilda.wfm.share.history.model.FlowHistoryHolder;
 import org.openkilda.wfm.share.mappers.FlowMapper;
 import org.openkilda.wfm.topology.flowhs.exception.FlowProcessingException;
-import org.openkilda.wfm.topology.flowhs.fsm.common.action.NbTrackableAction;
+import org.openkilda.wfm.topology.flowhs.fsm.common.actions.NbTrackableAction;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateContext;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateFsm;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateFsm.Event;
@@ -74,12 +74,9 @@ import java.util.Optional;
 
 @Slf4j
 public class ResourcesAllocationAction extends NbTrackableAction<FlowCreateFsm, State, Event, FlowCreateContext> {
-
-    private static String ERROR_MESSAGE = "Could not create flow";
-    private static final int MAX_TRANSACTION_RETRY_COUNT = 3;
-
     private final PathComputer pathComputer;
     private final TransactionManager transactionManager;
+    private final int transactionRetriesLimit;
     private final FlowResourcesManager resourcesManager;
     private final FlowRepository flowRepository;
     private final SwitchRepository switchRepository;
@@ -89,9 +86,12 @@ public class ResourcesAllocationAction extends NbTrackableAction<FlowCreateFsm, 
     private final SwitchPropertiesRepository switchPropertiesRepository;
 
     public ResourcesAllocationAction(PathComputer pathComputer, PersistenceManager persistenceManager,
-                                     FlowResourcesManager resourcesManager) {
+                                     int transactionRetriesLimit, FlowResourcesManager resourcesManager) {
+        super(persistenceManager);
+
         this.pathComputer = pathComputer;
         this.transactionManager = persistenceManager.getTransactionManager();
+        this.transactionRetriesLimit = transactionRetriesLimit;
         this.resourcesManager = resourcesManager;
         this.flowRepository = persistenceManager.getRepositoryFactory().createFlowRepository();
         this.switchRepository = persistenceManager.getRepositoryFactory().createSwitchRepository();
@@ -103,8 +103,8 @@ public class ResourcesAllocationAction extends NbTrackableAction<FlowCreateFsm, 
     }
 
     @Override
-    protected Optional<Message> perform(State from, State to, Event event, FlowCreateContext context,
-                                        FlowCreateFsm stateMachine) throws FlowProcessingException {
+    protected Optional<Message> performWithResponse(State from, State to, Event event, FlowCreateContext context,
+                                                    FlowCreateFsm stateMachine) throws FlowProcessingException {
         log.debug("Allocation resources has been started");
 
         Optional<Flow> optionalFlow = getFlow(context, stateMachine.getFlowId());
@@ -187,7 +187,7 @@ public class ResourcesAllocationAction extends NbTrackableAction<FlowCreateFsm, 
                     .retryOn(RecoverableException.class)
                     .retryOn(ResourceAllocationException.class)
                     .retryOn(TransientException.class)
-                    .withMaxRetries(MAX_TRANSACTION_RETRY_COUNT))
+                    .withMaxRetries(transactionRetriesLimit))
                     .onRetry(e -> log.warn("Retrying transaction for resource allocation finished with exception", e))
                     .onRetriesExceeded(e -> log.warn("TX retry attempts exceed with error", e))
                     .run(() -> transactionManager.doInTransaction(() -> {
@@ -328,6 +328,6 @@ public class ResourcesAllocationAction extends NbTrackableAction<FlowCreateFsm, 
 
     @Override
     protected String getGenericErrorMessage() {
-        return ERROR_MESSAGE;
+        return "Could not create flow";
     }
 }

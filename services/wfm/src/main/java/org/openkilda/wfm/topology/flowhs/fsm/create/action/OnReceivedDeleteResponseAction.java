@@ -30,7 +30,6 @@ import java.util.UUID;
 
 @Slf4j
 public class OnReceivedDeleteResponseAction extends OnReceivedInstallResponseAction {
-
     public OnReceivedDeleteResponseAction(PersistenceManager persistenceManager) {
         super(persistenceManager);
     }
@@ -49,8 +48,7 @@ public class OnReceivedDeleteResponseAction extends OnReceivedInstallResponseAct
             log.debug("Received response after deletion {} from the switch {}", rule.getCookie(), rule.getSwitchId());
             String description = format("Rule %s was deleted from the switch %s", rule.getCookie(), rule.getSwitchId());
 
-            saveHistory(stateMachine, stateMachine.getCarrier(), stateMachine.getFlowId(), "Rule deleted",
-                    description);
+            saveHistory(stateMachine, "Rule deleted", description);
         } else {
             FlowErrorResponse errorResponse = (FlowErrorResponse) response;
             log.error(format("Failed to delete rule with id %s, on the switch %s: %s", errorResponse.getCommandId(),
@@ -59,8 +57,7 @@ public class OnReceivedDeleteResponseAction extends OnReceivedInstallResponseAct
             String description = format("Failed to delete rule with id %s, on the switch %s: %s. Description: %s",
                     errorResponse.getCommandId(), errorResponse.getSwitchId(), errorResponse.getErrorCode(),
                     errorResponse.getDescription());
-            saveHistory(stateMachine, stateMachine.getCarrier(), stateMachine.getFlowId(),
-                    "Failed to delete rule", description);
+            saveHistory(stateMachine, "Failed to delete rule", description);
         }
     }
 }

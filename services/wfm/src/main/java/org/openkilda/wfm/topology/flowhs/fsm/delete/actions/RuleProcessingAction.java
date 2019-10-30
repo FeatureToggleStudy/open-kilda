@@ -22,6 +22,8 @@ import org.openkilda.wfm.share.history.model.FlowHistoryData;
 import org.openkilda.wfm.share.history.model.FlowHistoryHolder;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteContext;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.Event;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.State;
 
 import lombok.extern.slf4j.Slf4j;
 import org.squirrelframework.foundation.fsm.AnonymousAction;
@@ -31,23 +33,21 @@ import java.util.UUID;
 
 @Slf4j
 public abstract class RuleProcessingAction
-        extends AnonymousAction<FlowDeleteFsm, FlowDeleteFsm.State, FlowDeleteFsm.Event, FlowDeleteContext> {
+        extends AnonymousAction<FlowDeleteFsm, State, Event, FlowDeleteContext> {
 
     @Override
-    public final void execute(FlowDeleteFsm.State from, FlowDeleteFsm.State to,
-                              FlowDeleteFsm.Event event, FlowDeleteContext context,
+    public final void execute(State from, State to, Event event, FlowDeleteContext context,
                               FlowDeleteFsm stateMachine) {
         try {
             perform(from, to, event, context, stateMachine);
-        } catch (Exception e) {
-            log.error("Flow processing failure", e);
+        } catch (Exception ex) {
+            log.error("Flow processing failure", ex);
 
-            stateMachine.fireError();
+            stateMachine.fireError("Flow processing failure: " + ex.getMessage());
         }
     }
 
-    protected abstract void perform(FlowDeleteFsm.State from, FlowDeleteFsm.State to,
-                                    FlowDeleteFsm.Event event, FlowDeleteContext context,
+    protected abstract void perform(State from, State to, Event event, FlowDeleteContext context,
                                     FlowDeleteFsm stateMachine);
 
     protected long getCookieForCommand(FlowDeleteFsm stateMachine, UUID commandId) {

@@ -20,7 +20,7 @@ import static java.lang.String.format;
 import org.openkilda.floodlight.flow.request.InstallTransitRule;
 import org.openkilda.floodlight.flow.response.FlowRuleResponse;
 import org.openkilda.persistence.PersistenceManager;
-import org.openkilda.wfm.topology.flowhs.fsm.common.action.FlowProcessingAction;
+import org.openkilda.wfm.topology.flowhs.fsm.common.actions.FlowProcessingAction;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateContext;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateFsm;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateFsm.Event;
@@ -33,7 +33,6 @@ import java.util.UUID;
 
 @Slf4j
 public class ValidateNonIngressRuleAction extends FlowProcessingAction<FlowCreateFsm, State, Event, FlowCreateContext> {
-
     public ValidateNonIngressRuleAction(PersistenceManager persistenceManager) {
         super(persistenceManager);
     }
@@ -63,6 +62,6 @@ public class ValidateNonIngressRuleAction extends FlowProcessingAction<FlowCreat
     private void saveHistory(FlowCreateFsm stateMachine, InstallTransitRule expected, String action) {
         String description = format("Non ingress rule validation is completed: switch %s, cookie %s",
                 expected.getSwitchId().toString(), expected.getCookie());
-        saveHistory(stateMachine, stateMachine.getCarrier(), stateMachine.getFlowId(), action, description);
+        saveHistory(stateMachine, action, description);
     }
 }

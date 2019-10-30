@@ -22,7 +22,7 @@ import org.openkilda.model.FlowStatus;
 import org.openkilda.persistence.FetchStrategy;
 import org.openkilda.persistence.PersistenceManager;
 import org.openkilda.wfm.share.logger.FlowOperationsDashboardLogger;
-import org.openkilda.wfm.topology.flowhs.fsm.common.action.FlowProcessingAction;
+import org.openkilda.wfm.topology.flowhs.fsm.common.actions.FlowProcessingAction;
 import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteContext;
 import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm;
 import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm.Event;
@@ -31,9 +31,7 @@ import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm.State;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class UpdateFlowStatusAction extends
-        FlowProcessingAction<FlowRerouteFsm, State, Event, FlowRerouteContext> {
-
+public class UpdateFlowStatusAction extends FlowProcessingAction<FlowRerouteFsm, State, Event, FlowRerouteContext> {
     private final FlowOperationsDashboardLogger dashboardLogger;
 
     public UpdateFlowStatusAction(PersistenceManager persistenceManager,
@@ -58,7 +56,6 @@ public class UpdateFlowStatusAction extends
             return flowStatus;
         });
 
-        saveHistory(stateMachine, stateMachine.getCarrier(), flowId,
-                format("Set the flow status to %s.", resultStatus));
+        saveHistory(stateMachine, format("Set the flow status to %s.", resultStatus));
     }
 }

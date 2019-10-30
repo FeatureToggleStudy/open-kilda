@@ -29,14 +29,10 @@ import java.util.Collection;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class DumpIngressRulesAction extends
-        AnonymousAction<FlowRerouteFsm, State, Event, FlowRerouteContext> {
-
+public class DumpIngressRulesAction extends AnonymousAction<FlowRerouteFsm, State, Event, FlowRerouteContext> {
     @Override
-    public void execute(State from, State to,
-                        Event event, FlowRerouteContext context, FlowRerouteFsm stateMachine) {
-        log.debug("Validating installed ingress rules for the flow {}",
-                stateMachine.getFlowId());
+    public void execute(State from, State to, Event event, FlowRerouteContext context, FlowRerouteFsm stateMachine) {
+        log.debug("Validating installed ingress rules for the flow {}", stateMachine.getFlowId());
 
         Collection<GetInstalledRule> dumpFlowRules = stateMachine.getIngressCommands().values().stream()
                 .map(command -> new GetInstalledRule(command.getMessageContext(), command.getCommandId(),

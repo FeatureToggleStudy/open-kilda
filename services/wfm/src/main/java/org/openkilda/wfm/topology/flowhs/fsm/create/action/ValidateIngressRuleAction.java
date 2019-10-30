@@ -22,7 +22,7 @@ import org.openkilda.floodlight.flow.response.FlowRuleResponse;
 import org.openkilda.model.Switch;
 import org.openkilda.persistence.PersistenceManager;
 import org.openkilda.persistence.repositories.SwitchRepository;
-import org.openkilda.wfm.topology.flowhs.fsm.common.action.FlowProcessingAction;
+import org.openkilda.wfm.topology.flowhs.fsm.common.actions.FlowProcessingAction;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateContext;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateFsm;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateFsm.Event;
@@ -36,7 +36,6 @@ import java.util.UUID;
 
 @Slf4j
 public class ValidateIngressRuleAction extends FlowProcessingAction<FlowCreateFsm, State, Event, FlowCreateContext> {
-
     private final SwitchRepository switchRepository;
 
     public ValidateIngressRuleAction(PersistenceManager persistenceManager) {
@@ -51,7 +50,7 @@ public class ValidateIngressRuleAction extends FlowProcessingAction<FlowCreateFs
 
         InstallIngressRule expected = stateMachine.getIngressCommands().get(commandId);
 
-        Switch switchObj =  switchRepository.findById(expected.getSwitchId())
+        Switch switchObj = switchRepository.findById(expected.getSwitchId())
                 .orElseThrow(() -> new IllegalStateException(format("Failed to find switch %s",
                         expected.getSwitchId())));
 
@@ -62,7 +61,7 @@ public class ValidateIngressRuleAction extends FlowProcessingAction<FlowCreateFs
             stateMachine.getFailedCommands().add(commandId);
             action = format("Rule is valid: switch %s, cookie %s", expected.getSwitchId(), expected.getCookie());
         } else {
-            action = format("Rule is invalid: switch %s, cookie %s",  expected.getSwitchId(), expected.getCookie());
+            action = format("Rule is invalid: switch %s, cookie %s", expected.getSwitchId(), expected.getCookie());
         }
 
         stateMachine.getPendingCommands().remove(commandId);
@@ -76,6 +75,6 @@ public class ValidateIngressRuleAction extends FlowProcessingAction<FlowCreateFs
     private void saveHistory(FlowCreateFsm stateMachine, InstallIngressRule expected, String action) {
         String description = format("Ingress rule validation is completed: switch %s, cookie %s",
                 expected.getSwitchId().toString(), expected.getCookie());
-        saveHistory(stateMachine, stateMachine.getCarrier(), stateMachine.getFlowId(), action, description);
+        saveHistory(stateMachine, action, description);
     }
 }

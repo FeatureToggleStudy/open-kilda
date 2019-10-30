@@ -3,11 +3,7 @@ package org.openkilda.functionaltests.helpers
 import com.github.javafaker.Faker
 import groovy.util.logging.Slf4j
 import org.openkilda.functionaltests.helpers.model.SwitchPair
-import org.openkilda.messaging.payload.flow.DetectConnectedDevicesPayload
-import org.openkilda.messaging.payload.flow.FlowEndpointPayload
-import org.openkilda.messaging.payload.flow.FlowPathPayload
-import org.openkilda.messaging.payload.flow.FlowPayload
-import org.openkilda.messaging.payload.flow.FlowState
+import org.openkilda.messaging.payload.flow.*
 import org.openkilda.model.Flow
 import org.openkilda.northbound.dto.v2.flows.FlowEndpointV2
 import org.openkilda.northbound.dto.v2.flows.FlowRequestV2
@@ -236,6 +232,31 @@ class FlowHelperV2 {
 
     static FlowEndpointPayload toV1(FlowEndpointV2 ep) {
         new FlowEndpointPayload(ep.switchId, ep.portNumber, ep.vlanId, new DetectConnectedDevicesPayload(false, false))
+    }
+
+    static FlowRequestV2 toV2(FlowPayload flow) {
+        FlowRequestV2.builder()
+                .flowId(flow.id)
+                .description(flow.description)
+                .maximumBandwidth(flow.maximumBandwidth)
+                .ignoreBandwidth(flow.ignoreBandwidth)
+                .allocateProtectedPath(flow.allocateProtectedPath)
+                .periodicPings(flow.periodicPings)
+                .encapsulationType(flow.encapsulationType)
+                .maxLatency(flow.maxLatency)
+                .pinned(flow.pinned)
+                .priority(flow.priority)
+                .source(toV2(flow.source))
+                .destination(toV2(flow.destination))
+                .build()
+    }
+
+    static FlowEndpointV2 toV2(FlowEndpointPayload ep) {
+        FlowEndpointV2.builder()
+                .switchId(ep.getSwitchDpId())
+                .portNumber(ep.getPortId())
+                .vlanId(ep.getVlanId())
+                .build()
     }
 
     /**

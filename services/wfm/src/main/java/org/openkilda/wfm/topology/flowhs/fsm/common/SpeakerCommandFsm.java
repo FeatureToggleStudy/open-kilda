@@ -72,7 +72,7 @@ public final class SpeakerCommandFsm extends WithContextStateMachine<SpeakerComm
     }
 
     @Override
-    public void fireError() {
+    public void fireError(String errorReason) {
         fire(Event.ERROR);
     }
 

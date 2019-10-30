@@ -22,7 +22,7 @@ import org.openkilda.model.FlowEncapsulationType;
 import org.openkilda.model.FlowPath;
 import org.openkilda.persistence.PersistenceManager;
 import org.openkilda.wfm.share.flow.resources.FlowResourcesManager;
-import org.openkilda.wfm.topology.flowhs.fsm.common.action.FlowProcessingAction;
+import org.openkilda.wfm.topology.flowhs.fsm.common.actions.FlowProcessingAction;
 import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteContext;
 import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm;
 import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm.Event;
@@ -42,7 +42,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class InstallNonIngressRulesAction extends
         FlowProcessingAction<FlowRerouteFsm, State, Event, FlowRerouteContext> {
-
     private final FlowCommandBuilderFactory commandBuilderFactory;
 
     public InstallNonIngressRulesAction(PersistenceManager persistenceManager, FlowResourcesManager resourcesManager) {
@@ -52,9 +51,9 @@ public class InstallNonIngressRulesAction extends
     }
 
     @Override
-    protected void perform(FlowRerouteFsm.State from, FlowRerouteFsm.State to,
-                           FlowRerouteFsm.Event event, FlowRerouteContext context, FlowRerouteFsm stateMachine) {
-        Flow flow = getFlow(stateMachine.getFlowId());
+    protected void perform(State from, State to, Event event, FlowRerouteContext context, FlowRerouteFsm stateMachine) {
+        String flowId = stateMachine.getFlowId();
+        Flow flow = getFlow(flowId);
 
         FlowEncapsulationType encapsulationType = stateMachine.getNewEncapsulationType() != null
                 ? stateMachine.getNewEncapsulationType() : flow.getEncapsulationType();
@@ -79,10 +78,9 @@ public class InstallNonIngressRulesAction extends
                 .collect(Collectors.toMap(InstallTransitRule::getCommandId, Function.identity())));
 
         if (commands.isEmpty()) {
-            log.debug("No need to install non ingress rules for one switch flow {}", stateMachine.getFlowId());
+            log.debug("No need to install non ingress rules for one switch flow {}", flowId);
 
-            saveHistory(stateMachine, stateMachine.getCarrier(), stateMachine.getFlowId(),
-                    "Skip installation of non ingress commands.");
+            saveHistory(stateMachine, "Skip installation of non ingress commands.");
 
             stateMachine.fire(Event.RULES_INSTALLED);
         } else {
@@ -92,11 +90,9 @@ public class InstallNonIngressRulesAction extends
                     .collect(Collectors.toSet());
             stateMachine.setPendingCommands(commandIds);
 
-            log.debug("Commands for installing non ingress rules have been sent for the flow {}",
-                    stateMachine.getFlowId());
+            log.debug("Commands for installing non ingress rules have been sent for the flow {}", flowId);
 
-            saveHistory(stateMachine, stateMachine.getCarrier(), stateMachine.getFlowId(),
-                    "Install non ingress commands have been sent.");
+            saveHistory(stateMachine, "Install non ingress commands have been sent.");
         }
     }
 }

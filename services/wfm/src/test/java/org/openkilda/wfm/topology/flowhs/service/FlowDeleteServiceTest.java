@@ -47,7 +47,6 @@ import org.openkilda.model.SwitchId;
 import org.openkilda.model.TransitVlan;
 import org.openkilda.persistence.FetchStrategy;
 import org.openkilda.persistence.RecoverablePersistenceException;
-import org.openkilda.persistence.repositories.FeatureTogglesRepository;
 import org.openkilda.persistence.repositories.IslRepository;
 import org.openkilda.persistence.repositories.RepositoryFactory;
 import org.openkilda.persistence.repositories.history.FlowEventRepository;
@@ -69,6 +68,8 @@ import java.util.Optional;
 
 @RunWith(MockitoJUnitRunner.class)
 public class FlowDeleteServiceTest extends AbstractFlowTest {
+    private static final int TRANSACTION_RETRIES_LIMIT = 3;
+    private static final int SPEAKER_COMMAND_RETRIES_LIMIT = 3;
     private static final String FLOW_ID = "TEST_FLOW";
     private static final SwitchId SWITCH_1 = new SwitchId(1);
     private static final SwitchId SWITCH_2 = new SwitchId(2);
@@ -84,16 +85,12 @@ public class FlowDeleteServiceTest extends AbstractFlowTest {
     public void setUp() {
         RepositoryFactory repositoryFactory = mock(RepositoryFactory.class);
         when(repositoryFactory.createFlowRepository()).thenReturn(flowRepository);
-
         when(flowPathRepository.getUsedBandwidthBetweenEndpoints(any(), anyInt(), any(), anyInt())).thenReturn(0L);
-
         when(repositoryFactory.createFlowPathRepository()).thenReturn(flowPathRepository);
+        when(repositoryFactory.createFeatureTogglesRepository()).thenReturn(featureTogglesRepository);
 
         IslRepository islRepository = mock(IslRepository.class);
         when(repositoryFactory.createIslRepository()).thenReturn(islRepository);
-
-        FeatureTogglesRepository featureTogglesRepository = mock(FeatureTogglesRepository.class);
-        when(repositoryFactory.createFeatureTogglesRepository()).thenReturn(featureTogglesRepository);
 
         FlowEventRepository flowEventRepository = mock(FlowEventRepository.class);
         when(flowEventRepository.existsByTaskId(any())).thenReturn(false);
@@ -109,7 +106,7 @@ public class FlowDeleteServiceTest extends AbstractFlowTest {
         when(flowRepository.findById(eq(FLOW_ID), eq(FetchStrategy.DIRECT_RELATIONS))).thenReturn(Optional.empty());
 
         FlowDeleteService deleteService = new FlowDeleteService(carrier, persistenceManager,
-                flowResourcesManager);
+                flowResourcesManager, SPEAKER_COMMAND_RETRIES_LIMIT, TRANSACTION_RETRIES_LIMIT);
 
         deleteService.handleRequest("test_key", commandContext, FLOW_ID);
 
@@ -126,7 +123,7 @@ public class FlowDeleteServiceTest extends AbstractFlowTest {
         flow.setStatus(FlowStatus.IN_PROGRESS);
 
         FlowDeleteService deleteService = new FlowDeleteService(carrier, persistenceManager,
-                flowResourcesManager);
+                flowResourcesManager, SPEAKER_COMMAND_RETRIES_LIMIT, TRANSACTION_RETRIES_LIMIT);
 
         deleteService.handleRequest("test_key", commandContext, FLOW_ID);
 
@@ -145,7 +142,7 @@ public class FlowDeleteServiceTest extends AbstractFlowTest {
                 .when(flowPathRepository).lockInvolvedSwitches(any(), any());
 
         FlowDeleteService deleteService = new FlowDeleteService(carrier, persistenceManager,
-                flowResourcesManager);
+                flowResourcesManager, SPEAKER_COMMAND_RETRIES_LIMIT, TRANSACTION_RETRIES_LIMIT);
 
         deleteService.handleRequest("test_key", commandContext, FLOW_ID);
 
@@ -177,7 +174,7 @@ public class FlowDeleteServiceTest extends AbstractFlowTest {
         buildFlowResources();
 
         FlowDeleteService deleteService = new FlowDeleteService(carrier, persistenceManager,
-                flowResourcesManager);
+                flowResourcesManager, SPEAKER_COMMAND_RETRIES_LIMIT, TRANSACTION_RETRIES_LIMIT);
 
         deleteService.handleRequest("test_key", commandContext, FLOW_ID);
 
@@ -214,7 +211,7 @@ public class FlowDeleteServiceTest extends AbstractFlowTest {
         buildFlowResources();
 
         FlowDeleteService deleteService = new FlowDeleteService(carrier, persistenceManager,
-                flowResourcesManager);
+                flowResourcesManager, SPEAKER_COMMAND_RETRIES_LIMIT, TRANSACTION_RETRIES_LIMIT);
 
         deleteService.handleRequest("test_key", commandContext, FLOW_ID);
 
@@ -251,7 +248,7 @@ public class FlowDeleteServiceTest extends AbstractFlowTest {
         buildFlowResources();
 
         FlowDeleteService deleteService = new FlowDeleteService(carrier, persistenceManager,
-                flowResourcesManager);
+                flowResourcesManager, SPEAKER_COMMAND_RETRIES_LIMIT, TRANSACTION_RETRIES_LIMIT);
 
         deleteService.handleRequest("test_key", commandContext, FLOW_ID);
 
@@ -272,7 +269,7 @@ public class FlowDeleteServiceTest extends AbstractFlowTest {
         buildFlowResources();
 
         FlowDeleteService deleteService = new FlowDeleteService(carrier, persistenceManager,
-                flowResourcesManager);
+                flowResourcesManager, SPEAKER_COMMAND_RETRIES_LIMIT, TRANSACTION_RETRIES_LIMIT);
 
         deleteService.handleRequest("test_key", commandContext, FLOW_ID);
 
@@ -306,7 +303,7 @@ public class FlowDeleteServiceTest extends AbstractFlowTest {
         buildFlowResources();
 
         FlowDeleteService deleteService = new FlowDeleteService(carrier, persistenceManager,
-                flowResourcesManager);
+                flowResourcesManager, SPEAKER_COMMAND_RETRIES_LIMIT, TRANSACTION_RETRIES_LIMIT);
 
         deleteService.handleRequest("test_key", commandContext, FLOW_ID);
 
@@ -345,7 +342,7 @@ public class FlowDeleteServiceTest extends AbstractFlowTest {
         buildFlowResources();
 
         FlowDeleteService deleteService = new FlowDeleteService(carrier, persistenceManager,
-                flowResourcesManager);
+                flowResourcesManager, SPEAKER_COMMAND_RETRIES_LIMIT, TRANSACTION_RETRIES_LIMIT);
 
         deleteService.handleRequest("test_key", commandContext, FLOW_ID);
 
@@ -382,7 +379,7 @@ public class FlowDeleteServiceTest extends AbstractFlowTest {
         buildFlowResources();
 
         FlowDeleteService deleteService = new FlowDeleteService(carrier, persistenceManager,
-                flowResourcesManager);
+                flowResourcesManager, SPEAKER_COMMAND_RETRIES_LIMIT, TRANSACTION_RETRIES_LIMIT);
 
         deleteService.handleRequest("test_key", commandContext, FLOW_ID);
 

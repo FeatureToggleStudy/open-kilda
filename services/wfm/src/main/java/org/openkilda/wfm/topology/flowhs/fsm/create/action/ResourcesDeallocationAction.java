@@ -25,7 +25,7 @@ import org.openkilda.persistence.repositories.IslRepository;
 import org.openkilda.wfm.share.flow.resources.FlowResources;
 import org.openkilda.wfm.share.flow.resources.FlowResourcesManager;
 import org.openkilda.wfm.topology.flowhs.exception.FlowProcessingException;
-import org.openkilda.wfm.topology.flowhs.fsm.common.action.FlowProcessingAction;
+import org.openkilda.wfm.topology.flowhs.fsm.common.actions.FlowProcessingAction;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateContext;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateFsm;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateFsm.Event;
@@ -39,13 +39,13 @@ import java.util.stream.Stream;
 
 @Slf4j
 public class ResourcesDeallocationAction extends FlowProcessingAction<FlowCreateFsm, State, Event, FlowCreateContext> {
-
     private final TransactionManager transactionManager;
     private final FlowResourcesManager resourcesManager;
     private final IslRepository islRepository;
 
     public ResourcesDeallocationAction(FlowResourcesManager resourcesManager, PersistenceManager persistenceManager) {
         super(persistenceManager);
+
         this.transactionManager = persistenceManager.getTransactionManager();
         this.resourcesManager = resourcesManager;
         this.islRepository = persistenceManager.getRepositoryFactory().createIslRepository();
@@ -78,8 +78,7 @@ public class ResourcesDeallocationAction extends FlowProcessingAction<FlowCreate
             }
         });
 
-        saveHistory(stateMachine, stateMachine.getCarrier(), stateMachine.getFlowId(),
-                "Resources released successfully");
+        saveHistory(stateMachine, "Resources released successfully");
         log.debug("Flow resources have been deallocated for flow {}", flow.getFlowId());
     }
 

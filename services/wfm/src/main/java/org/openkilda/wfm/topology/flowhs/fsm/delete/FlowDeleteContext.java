@@ -16,14 +16,18 @@
 package org.openkilda.wfm.topology.flowhs.fsm.delete;
 
 import org.openkilda.floodlight.flow.response.FlowResponse;
+import org.openkilda.wfm.topology.flowhs.fsm.common.FlowContext;
 
 import lombok.Builder;
 import lombok.Data;
 
 @Data
-@Builder
-public class FlowDeleteContext {
+public class FlowDeleteContext extends FlowContext {
     private String flowId;
 
-    private FlowResponse flowResponse;
+    @Builder
+    public FlowDeleteContext(FlowResponse speakerFlowResponse, String flowId) {
+        super(speakerFlowResponse);
+        this.flowId = flowId;
+    }
 }

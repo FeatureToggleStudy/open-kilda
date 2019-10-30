@@ -22,7 +22,7 @@ import org.openkilda.persistence.PersistenceManager;
 import org.openkilda.persistence.repositories.FlowPathRepository;
 import org.openkilda.persistence.repositories.FlowRepository;
 import org.openkilda.wfm.share.logger.FlowOperationsDashboardLogger;
-import org.openkilda.wfm.topology.flowhs.fsm.common.action.FlowProcessingAction;
+import org.openkilda.wfm.topology.flowhs.fsm.common.actions.FlowProcessingAction;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateContext;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateFsm;
 import org.openkilda.wfm.topology.flowhs.fsm.create.FlowCreateFsm.Event;
@@ -34,7 +34,6 @@ import java.util.Optional;
 
 @Slf4j
 public class CompleteFlowCreateAction extends FlowProcessingAction<FlowCreateFsm, State, Event, FlowCreateContext> {
-
     private final FlowRepository flowRepository;
     private final FlowPathRepository flowPathRepository;
     private final FlowOperationsDashboardLogger dashboardLogger;
@@ -58,14 +57,14 @@ public class CompleteFlowCreateAction extends FlowProcessingAction<FlowCreateFsm
                 flowPathRepository.updateStatus(stateMachine.getProtectedForwardPathId(), FlowPathStatus.ACTIVE);
                 flowPathRepository.updateStatus(stateMachine.getProtectedReversePathId(), FlowPathStatus.ACTIVE);
             }
+            dashboardLogger.onSuccessfulFlowCreate(flowId);
 
-            dashboardLogger.onFlowStatusUpdate(flowId, FlowStatus.UP);
             flowRepository.updateStatus(flowId, FlowStatus.UP);
+            dashboardLogger.onFlowStatusUpdate(flowId, FlowStatus.UP);
             log.info("Flow {} successfully created", stateMachine.getFlowId());
-            saveHistory(stateMachine, stateMachine.getCarrier(), stateMachine.getFlowId(), "Created successfully");
+            saveHistory(stateMachine, "Created successfully");
         } else {
             log.debug("Cannot complete flow {} creation: it was deleted", flowId);
         }
     }
-
 }

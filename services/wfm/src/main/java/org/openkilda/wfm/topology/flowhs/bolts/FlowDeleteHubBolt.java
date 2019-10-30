@@ -36,27 +36,26 @@ import org.openkilda.wfm.topology.flowhs.service.FlowDeleteHubCarrier;
 import org.openkilda.wfm.topology.flowhs.service.FlowDeleteService;
 import org.openkilda.wfm.topology.utils.MessageKafkaTranslator;
 
+import lombok.Builder;
+import lombok.Getter;
 import org.apache.storm.topology.OutputFieldsDeclarer;
 import org.apache.storm.tuple.Tuple;
 import org.apache.storm.tuple.Values;
 
 public class FlowDeleteHubBolt extends HubBolt implements FlowDeleteHubCarrier {
+
+    private final FlowDeleteConfig config;
     private final PersistenceManager persistenceManager;
     private final FlowResourcesConfig flowResourcesConfig;
 
     private transient FlowDeleteService service;
     private String currentKey;
 
-    public FlowDeleteHubBolt(String routerBoltId, String workerBoltId, int timeoutMs, boolean autoAck,
-                             PersistenceManager persistenceManager,
+    public FlowDeleteHubBolt(FlowDeleteConfig config, PersistenceManager persistenceManager,
                              FlowResourcesConfig flowResourcesConfig) {
-        super(Config.builder()
-                .requestSenderComponent(routerBoltId)
-                .workerComponent(workerBoltId)
-                .timeoutMs(timeoutMs)
-                .autoAck(autoAck)
-                .build());
+        super(config);
 
+        this.config = config;
         this.persistenceManager = persistenceManager;
         this.flowResourcesConfig = flowResourcesConfig;
     }
@@ -64,7 +63,8 @@ public class FlowDeleteHubBolt extends HubBolt implements FlowDeleteHubCarrier {
     @Override
     protected void init() {
         FlowResourcesManager resourcesManager = new FlowResourcesManager(persistenceManager, flowResourcesConfig);
-        service = new FlowDeleteService(this, persistenceManager, resourcesManager);
+        service = new FlowDeleteService(this, persistenceManager, resourcesManager,
+                config.getTransactionRetriesLimit(), config.getSpeakerCommandRetriesLimit());
     }
 
     @Override
@@ -89,17 +89,9 @@ public class FlowDeleteHubBolt extends HubBolt implements FlowDeleteHubCarrier {
     }
 
     @Override
-    public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        super.declareOutputFields(declarer);
-
-        declarer.declareStream(HUB_TO_SPEAKER_WORKER.name(), MessageKafkaTranslator.STREAM_FIELDS);
-        declarer.declareStream(HUB_TO_NB_RESPONSE_SENDER.name(), MessageKafkaTranslator.STREAM_FIELDS);
-        declarer.declareStream(HUB_TO_HISTORY_BOLT.name(), MessageKafkaTranslator.STREAM_FIELDS);
-    }
-
-    @Override
     public void sendSpeakerRequest(SpeakerFlowRequest command) {
         String commandKey = KeyProvider.joinKeys(command.getCommandId().toString(), currentKey);
+
         Values values = new Values(commandKey, command);
         emitWithContext(HUB_TO_SPEAKER_WORKER.name(), getCurrentTuple(), values);
     }
@@ -117,5 +109,28 @@ public class FlowDeleteHubBolt extends HubBolt implements FlowDeleteHubCarrier {
     @Override
     public void cancelTimeoutCallback(String key) {
         cancelCallback(key);
+    }
+
+    @Override
+    public void declareOutputFields(OutputFieldsDeclarer declarer) {
+        super.declareOutputFields(declarer);
+
+        declarer.declareStream(HUB_TO_SPEAKER_WORKER.name(), MessageKafkaTranslator.STREAM_FIELDS);
+        declarer.declareStream(HUB_TO_NB_RESPONSE_SENDER.name(), MessageKafkaTranslator.STREAM_FIELDS);
+        declarer.declareStream(HUB_TO_HISTORY_BOLT.name(), MessageKafkaTranslator.STREAM_FIELDS);
+    }
+
+    @Getter
+    public static class FlowDeleteConfig extends Config {
+        private int transactionRetriesLimit;
+        private int speakerCommandRetriesLimit;
+
+        @Builder(builderMethodName = "flowDeleteBuilder", builderClassName = "flowDeleteBuild")
+        public FlowDeleteConfig(String requestSenderComponent, String workerComponent, int timeoutMs, boolean autoAck,
+                                int transactionRetriesLimit, int speakerCommandRetriesLimit) {
+            super(requestSenderComponent, workerComponent, timeoutMs, autoAck);
+            this.transactionRetriesLimit = transactionRetriesLimit;
+            this.speakerCommandRetriesLimit = speakerCommandRetriesLimit;
+        }
     }
 }

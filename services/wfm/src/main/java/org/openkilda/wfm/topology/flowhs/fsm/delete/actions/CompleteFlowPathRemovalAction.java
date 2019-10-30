@@ -20,48 +20,43 @@ import static java.lang.String.format;
 import org.openkilda.model.Flow;
 import org.openkilda.model.FlowPath;
 import org.openkilda.model.SwitchId;
-import org.openkilda.pce.exception.RecoverableException;
 import org.openkilda.persistence.PersistenceManager;
 import org.openkilda.persistence.RecoverablePersistenceException;
 import org.openkilda.persistence.repositories.IslRepository;
 import org.openkilda.wfm.share.history.model.FlowDumpData;
 import org.openkilda.wfm.share.history.model.FlowDumpData.DumpType;
-import org.openkilda.wfm.share.history.model.FlowHistoryData;
-import org.openkilda.wfm.share.history.model.FlowHistoryHolder;
 import org.openkilda.wfm.share.mappers.HistoryMapper;
-import org.openkilda.wfm.topology.flowhs.fsm.common.action.FlowProcessingAction;
+import org.openkilda.wfm.topology.flowhs.fsm.common.actions.FlowProcessingAction;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteContext;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.Event;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.State;
 
 import lombok.extern.slf4j.Slf4j;
 import net.jodah.failsafe.RetryPolicy;
 import org.neo4j.driver.v1.exceptions.ClientException;
 
-import java.time.Instant;
 import java.util.Objects;
 
 @Slf4j
 public class CompleteFlowPathRemovalAction extends
-        FlowProcessingAction<FlowDeleteFsm, FlowDeleteFsm.State, FlowDeleteFsm.Event, FlowDeleteContext> {
-    private static final int MAX_TRANSACTION_RETRY_COUNT = 3;
-
+        FlowProcessingAction<FlowDeleteFsm, State, Event, FlowDeleteContext> {
     private final IslRepository islRepository;
+    private final int transactionRetriesLimit;
 
-    public CompleteFlowPathRemovalAction(PersistenceManager persistenceManager) {
+    public CompleteFlowPathRemovalAction(PersistenceManager persistenceManager, int transactionRetriesLimit) {
         super(persistenceManager);
 
         islRepository = persistenceManager.getRepositoryFactory().createIslRepository();
+        this.transactionRetriesLimit = transactionRetriesLimit;
     }
 
     @Override
-    protected void perform(FlowDeleteFsm.State from, FlowDeleteFsm.State to,
-                           FlowDeleteFsm.Event event, FlowDeleteContext context,
-                           FlowDeleteFsm stateMachine) {
+    protected void perform(State from, State to, Event event, FlowDeleteContext context, FlowDeleteFsm stateMachine) {
         RetryPolicy retryPolicy = new RetryPolicy()
-                .retryOn(RecoverableException.class)
                 .retryOn(RecoverablePersistenceException.class)
                 .retryOn(ClientException.class)
-                .withMaxRetries(MAX_TRANSACTION_RETRY_COUNT);
+                .withMaxRetries(transactionRetriesLimit);
 
         persistenceManager.getTransactionManager().doInTransaction(retryPolicy, () -> {
             Flow flow = getFlow(stateMachine.getFlowId());
@@ -73,7 +68,7 @@ public class CompleteFlowPathRemovalAction extends
                 log.debug("Removing the flow path {}", path);
                 flowPathRepository.delete(path);
                 updateIslsForFlowPath(path);
-                saveHistory(stateMachine, stateMachine.getFlowId(), path);
+                saveHistory(stateMachine, path);
             }
         });
     }
@@ -97,19 +92,10 @@ public class CompleteFlowPathRemovalAction extends
         islRepository.updateAvailableBandwidth(srcSwitch, srcPort, dstSwitch, dstPort, usedBandwidth);
     }
 
-    protected void saveHistory(FlowDeleteFsm stateMachine, String flowId, FlowPath path) {
+    private void saveHistory(FlowDeleteFsm stateMachine, FlowPath path) {
         FlowDumpData flowDumpData = HistoryMapper.INSTANCE.map(path.getFlow(), path);
         flowDumpData.setDumpType(DumpType.STATE_BEFORE);
-        FlowHistoryHolder historyHolder = FlowHistoryHolder.builder()
-                .taskId(stateMachine.getCommandContext().getCorrelationId())
-                .flowDumpData(flowDumpData)
-                .flowHistoryData(FlowHistoryData.builder()
-                        .action("Flow path were removed")
-                        .time(Instant.now())
-                        .description(format("Flow path %s were removed", path.getPathId()))
-                        .flowId(flowId)
-                        .build())
-                .build();
-        stateMachine.getCarrier().sendHistoryUpdate(historyHolder);
+        saveHistoryWithDump(stateMachine, "Flow path were removed",
+                format("Flow path %s were removed", path.getPathId()), flowDumpData);
     }
 }

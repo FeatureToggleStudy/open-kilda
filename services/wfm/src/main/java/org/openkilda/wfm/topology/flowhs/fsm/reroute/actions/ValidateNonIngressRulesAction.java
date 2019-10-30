@@ -33,11 +33,9 @@ import java.util.UUID;
 
 @Slf4j
 public class ValidateNonIngressRulesAction extends RuleProcessingAction {
-
     @Override
-    protected void perform(State from, State to,
-                           Event event, FlowRerouteContext context, FlowRerouteFsm stateMachine) {
-        FlowResponse response = context.getFlowResponse();
+    protected void perform(State from, State to, Event event, FlowRerouteContext context, FlowRerouteFsm stateMachine) {
+        FlowResponse response = context.getSpeakerFlowResponse();
         UUID commandId = response.getCommandId();
         stateMachine.getPendingCommands().remove(commandId);
 
@@ -47,8 +45,7 @@ public class ValidateNonIngressRulesAction extends RuleProcessingAction {
         }
 
         if (response.isSuccess()) {
-            RulesValidator validator =
-                    new NonIngressRulesValidator(expected, (FlowRuleResponse) context.getFlowResponse());
+            RulesValidator validator = new NonIngressRulesValidator(expected, (FlowRuleResponse) response);
             if (validator.validate()) {
                 String message = format("Non ingress rule %s has been validated successfully on switch %s",
                         expected.getCookie(), expected.getSwitchId());

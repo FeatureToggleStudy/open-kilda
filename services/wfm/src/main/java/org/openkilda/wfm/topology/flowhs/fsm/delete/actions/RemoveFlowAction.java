@@ -16,59 +16,42 @@
 package org.openkilda.wfm.topology.flowhs.fsm.delete.actions;
 
 import org.openkilda.model.Flow;
-import org.openkilda.pce.exception.RecoverableException;
 import org.openkilda.persistence.PersistenceManager;
 import org.openkilda.persistence.RecoverablePersistenceException;
-import org.openkilda.wfm.share.history.model.FlowHistoryData;
-import org.openkilda.wfm.share.history.model.FlowHistoryHolder;
-import org.openkilda.wfm.topology.flowhs.fsm.common.action.FlowProcessingAction;
+import org.openkilda.wfm.topology.flowhs.fsm.common.actions.FlowProcessingAction;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteContext;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.Event;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.State;
 
 import lombok.extern.slf4j.Slf4j;
 import net.jodah.failsafe.RetryPolicy;
 import org.neo4j.driver.v1.exceptions.ClientException;
 
-import java.time.Instant;
-
 @Slf4j
-public class RemoveFlowAction extends
-        FlowProcessingAction<FlowDeleteFsm, FlowDeleteFsm.State, FlowDeleteFsm.Event, FlowDeleteContext> {
-    private static final int MAX_TRANSACTION_RETRY_COUNT = 3;
+public class RemoveFlowAction extends FlowProcessingAction<FlowDeleteFsm, State, Event, FlowDeleteContext> {
+    private final int transactionRetriesLimit;
 
-    public RemoveFlowAction(PersistenceManager persistenceManager) {
+    public RemoveFlowAction(PersistenceManager persistenceManager, int transactionRetriesLimit) {
         super(persistenceManager);
+
+        this.transactionRetriesLimit = transactionRetriesLimit;
     }
 
     @Override
-    protected void perform(FlowDeleteFsm.State from, FlowDeleteFsm.State to,
-                           FlowDeleteFsm.Event event, FlowDeleteContext context,
-                           FlowDeleteFsm stateMachine) {
+    protected void perform(State from, State to, Event event, FlowDeleteContext context, FlowDeleteFsm stateMachine) {
         RetryPolicy retryPolicy = new RetryPolicy()
-                .retryOn(RecoverableException.class)
                 .retryOn(RecoverablePersistenceException.class)
                 .retryOn(ClientException.class)
-                .withMaxRetries(MAX_TRANSACTION_RETRY_COUNT);
+                .withMaxRetries(transactionRetriesLimit);
 
         persistenceManager.getTransactionManager().doInTransaction(retryPolicy, () -> {
             Flow flow = getFlow(stateMachine.getFlowId());
             log.debug("Removing the flow {}", flow);
             flowRepository.delete(flow);
 
-            saveHistory(stateMachine, stateMachine.getFlowId());
+            saveHistory(stateMachine, "Flow was removed",
+                    String.format("Flow %s were removed", stateMachine.getFlowId()));
         });
-    }
-
-    protected void saveHistory(FlowDeleteFsm stateMachine, String flowId) {
-        FlowHistoryHolder historyHolder = FlowHistoryHolder.builder()
-                .taskId(stateMachine.getCommandContext().getCorrelationId())
-                .flowHistoryData(FlowHistoryData.builder()
-                        .action("Flow was removed")
-                        .time(Instant.now())
-                        .description(String.format("Flow %s were removed", flowId))
-                        .flowId(flowId)
-                        .build())
-                .build();
-        stateMachine.getCarrier().sendHistoryUpdate(historyHolder);
     }
 }

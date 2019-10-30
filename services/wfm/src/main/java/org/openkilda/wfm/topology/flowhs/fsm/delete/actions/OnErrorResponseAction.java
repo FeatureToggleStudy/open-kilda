@@ -23,6 +23,7 @@ import org.openkilda.floodlight.flow.response.FlowResponse;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteContext;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.Event;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.State;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -30,13 +31,15 @@ import java.util.UUID;
 
 @Slf4j
 public class OnErrorResponseAction extends RuleProcessingAction {
-    private static final int MAX_RULE_COMMAND_RETRY_COUNT = 3;
+    private final int speakerCommandRetriesLimit;
+
+    public OnErrorResponseAction(int speakerCommandRetriesLimit) {
+        this.speakerCommandRetriesLimit = speakerCommandRetriesLimit;
+    }
 
     @Override
-    protected void perform(FlowDeleteFsm.State from, FlowDeleteFsm.State to,
-                           Event event, FlowDeleteContext context,
-                           FlowDeleteFsm stateMachine) {
-        FlowResponse response = context.getFlowResponse();
+    protected void perform(State from, State to, Event event, FlowDeleteContext context, FlowDeleteFsm stateMachine) {
+        FlowResponse response = context.getSpeakerFlowResponse();
         if (response.isSuccess() || !(response instanceof FlowErrorResponse)) {
             throw new IllegalArgumentException(
                     format("Invoked %s for a success response: %s", this.getClass(), response));
@@ -53,7 +56,7 @@ public class OnErrorResponseAction extends RuleProcessingAction {
         long cookie = getCookieForCommand(stateMachine, failedCommandId);
 
         int retries = stateMachine.getRetriedCommands().getOrDefault(failedCommandId, 0);
-        if (retries < MAX_RULE_COMMAND_RETRY_COUNT) {
+        if (retries < speakerCommandRetriesLimit) {
             stateMachine.getRetriedCommands().put(failedCommandId, ++retries);
 
             String message = format(
@@ -77,9 +80,10 @@ public class OnErrorResponseAction extends RuleProcessingAction {
             stateMachine.getErrorResponses().put(failedCommandId, errorResponse);
 
             if (stateMachine.getPendingCommands().isEmpty()) {
-                log.warn("Received error response(s) for some remove commands of the flow {}",
-                        stateMachine.getFlowId());
-                stateMachine.fireError();
+                String errorMessage = format("Received error response(s) for %d remove commands of the flow %s",
+                        stateMachine.getErrorResponses().size(), stateMachine.getFlowId());
+                log.warn(errorMessage);
+                stateMachine.fire(Event.RULES_REMOVED);
             }
         }
     }

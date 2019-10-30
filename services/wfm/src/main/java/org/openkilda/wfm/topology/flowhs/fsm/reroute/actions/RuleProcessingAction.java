@@ -24,6 +24,8 @@ import org.openkilda.wfm.share.history.model.FlowHistoryData;
 import org.openkilda.wfm.share.history.model.FlowHistoryHolder;
 import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteContext;
 import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm;
+import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm.Event;
+import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm.State;
 
 import lombok.extern.slf4j.Slf4j;
 import org.squirrelframework.foundation.fsm.AnonymousAction;
@@ -32,23 +34,21 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Slf4j
-public abstract class RuleProcessingAction
-        extends AnonymousAction<FlowRerouteFsm, FlowRerouteFsm.State, FlowRerouteFsm.Event, FlowRerouteContext> {
-
+public abstract class RuleProcessingAction extends AnonymousAction<FlowRerouteFsm, State, Event, FlowRerouteContext> {
     @Override
-    public final void execute(FlowRerouteFsm.State from, FlowRerouteFsm.State to, FlowRerouteFsm.Event event,
-                              FlowRerouteContext context, FlowRerouteFsm stateMachine) {
+    public final void execute(State from, State to, Event event, FlowRerouteContext context,
+                              FlowRerouteFsm stateMachine) {
         try {
             perform(from, to, event, context, stateMachine);
-        } catch (Exception e) {
-            log.error("Flow processing failure", e);
+        } catch (Exception ex) {
+            log.error("Flow processing failure", ex);
 
-            stateMachine.fireError();
+            stateMachine.fireError("Flow processing failure: " + ex.getMessage());
         }
     }
 
-    protected abstract void perform(FlowRerouteFsm.State from, FlowRerouteFsm.State to, FlowRerouteFsm.Event event,
-                                    FlowRerouteContext context, FlowRerouteFsm stateMachine);
+    protected abstract void perform(State from, State to, Event event, FlowRerouteContext context,
+                                    FlowRerouteFsm stateMachine);
 
     protected long getCookieForCommand(FlowRerouteFsm stateMachine, UUID commandId) {
         long cookie;

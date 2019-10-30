@@ -22,6 +22,7 @@ import org.openkilda.floodlight.flow.response.FlowResponse;
 import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteContext;
 import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm;
 import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm.Event;
+import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm.State;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -30,9 +31,8 @@ import java.util.UUID;
 @Slf4j
 public class OnReceivedInstallResponseAction extends RuleProcessingAction {
     @Override
-    protected void perform(FlowRerouteFsm.State from, FlowRerouteFsm.State to,
-                           FlowRerouteFsm.Event event, FlowRerouteContext context, FlowRerouteFsm stateMachine) {
-        FlowResponse response = context.getFlowResponse();
+    protected void perform(State from, State to, Event event, FlowRerouteContext context, FlowRerouteFsm stateMachine) {
+        FlowResponse response = context.getSpeakerFlowResponse();
         UUID commandId = response.getCommandId();
         if (stateMachine.getPendingCommands().remove(commandId)) {
             long cookie = getCookieForCommand(stateMachine, commandId);
@@ -62,9 +62,10 @@ public class OnReceivedInstallResponseAction extends RuleProcessingAction {
                         stateMachine.getFlowId());
                 stateMachine.fire(Event.RULES_INSTALLED);
             } else {
-                log.warn("Received error response(s) for some install commands of the flow {}",
-                        stateMachine.getFlowId());
-                stateMachine.fireError();
+                String errorMessage = format("Received error response(s) for %d install commands of the flow %s",
+                        stateMachine.getErrorResponses().size(), stateMachine.getFlowId());
+                log.warn(errorMessage);
+                stateMachine.fireError(errorMessage);
             }
         }
     }

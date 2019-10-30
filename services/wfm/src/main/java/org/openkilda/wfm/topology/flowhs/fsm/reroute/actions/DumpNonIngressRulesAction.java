@@ -33,14 +33,10 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class DumpNonIngressRulesAction extends
-        AnonymousAction<FlowRerouteFsm, State, Event, FlowRerouteContext> {
-
+public class DumpNonIngressRulesAction extends AnonymousAction<FlowRerouteFsm, State, Event, FlowRerouteContext> {
     @Override
-    public void execute(State from, State to,
-                        Event event, FlowRerouteContext context, FlowRerouteFsm stateMachine) {
-        log.debug("Validating installed non ingress rules for the flow {}",
-                stateMachine.getFlowId());
+    public void execute(State from, State to, Event event, FlowRerouteContext context, FlowRerouteFsm stateMachine) {
+        log.debug("Validating installed non ingress rules for the flow {}", stateMachine.getFlowId());
 
         Map<UUID, InstallTransitRule> nonIngressCommands = stateMachine.getNonIngressCommands();
 

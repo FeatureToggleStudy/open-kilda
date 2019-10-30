@@ -26,6 +26,8 @@ import org.openkilda.messaging.command.flow.FlowDeleteRequest;
 import org.openkilda.messaging.command.flow.FlowPathSwapRequest;
 import org.openkilda.messaging.command.flow.FlowPingRequest;
 import org.openkilda.messaging.command.flow.FlowReadRequest;
+import org.openkilda.messaging.command.flow.FlowRequest;
+import org.openkilda.messaging.command.flow.FlowRequest.Type;
 import org.openkilda.messaging.command.flow.FlowRerouteRequest;
 import org.openkilda.messaging.command.flow.FlowUpdateRequest;
 import org.openkilda.messaging.command.flow.FlowsDumpRequest;
@@ -160,8 +162,8 @@ public class FlowServiceImpl implements FlowService {
      * {@inheritDoc}
      */
     @Override
-    public CompletableFuture<FlowResponsePayload> createFlow(final FlowCreatePayload input) {
-        final String correlationId = RequestCorrelationId.getId();
+    public CompletableFuture<FlowResponsePayload> createFlow(FlowCreatePayload input) {
+        String correlationId = RequestCorrelationId.getId();
         logger.info("Create flow: {}", input);
 
         FlowCreateRequest payload;
@@ -199,7 +201,7 @@ public class FlowServiceImpl implements FlowService {
      * {@inheritDoc}
      */
     @Override
-    public CompletableFuture<FlowResponsePayload> getFlow(final String id) {
+    public CompletableFuture<FlowResponsePayload> getFlow(String id) {
         logger.debug("Get flow request for flow {}", id);
 
         return getFlowReadResponse(id, RequestCorrelationId.getId())
@@ -210,8 +212,8 @@ public class FlowServiceImpl implements FlowService {
      * {@inheritDoc}
      */
     @Override
-    public CompletableFuture<FlowResponsePayload> updateFlow(final FlowUpdatePayload input) {
-        final String correlationId = RequestCorrelationId.getId();
+    public CompletableFuture<FlowResponsePayload> updateFlow(FlowUpdatePayload input) {
+        String correlationId = RequestCorrelationId.getId();
         logger.info("Update flow request for flow {}", input.getId());
 
         FlowUpdateRequest payload;
@@ -229,6 +231,20 @@ public class FlowServiceImpl implements FlowService {
                 .thenApply(FlowResponse.class::cast)
                 .thenApply(FlowResponse::getPayload)
                 .thenApply(flowMapper::toFlowResponseOutput);
+    }
+
+    @Override
+    public CompletableFuture<FlowResponseV2> updateFlow(FlowRequestV2 request) {
+        logger.info("Processing flow update: {}", request);
+
+        FlowRequest updateRequest = flowMapper.toFlowRequest(request).toBuilder().type(Type.UPDATE).build();
+        CommandMessage command = new CommandMessage(updateRequest,
+                System.currentTimeMillis(), RequestCorrelationId.getId(), Destination.WFM);
+
+        return messagingChannel.sendAndGet(flowHsTopic, command)
+                .thenApply(FlowResponse.class::cast)
+                .thenApply(FlowResponse::getPayload)
+                .thenApply(flowMapper::toFlowResponseV2);
     }
 
     @Override
@@ -251,7 +267,7 @@ public class FlowServiceImpl implements FlowService {
      */
     @Override
     public CompletableFuture<List<FlowResponsePayload>> getAllFlows() {
-        final String correlationId = RequestCorrelationId.getId();
+        String correlationId = RequestCorrelationId.getId();
         logger.debug("Get flows request processing");
         FlowsDumpRequest data = new FlowsDumpRequest();
         CommandMessage request = new CommandMessage(data, System.currentTimeMillis(), correlationId, Destination.WFM);
@@ -292,9 +308,9 @@ public class FlowServiceImpl implements FlowService {
      * {@inheritDoc}
      */
     @Override
-    public CompletableFuture<FlowResponsePayload> deleteFlow(final String id) {
+    public CompletableFuture<FlowResponsePayload> deleteFlow(String id) {
         logger.info("Delete flow request for flow: {}", id);
-        final String correlationId = RequestCorrelationId.getId();
+        String correlationId = RequestCorrelationId.getId();
 
         return sendDeleteFlow(id, correlationId);
     }
@@ -332,7 +348,7 @@ public class FlowServiceImpl implements FlowService {
      *
      * @return the request
      */
-    private CommandMessage buildDeleteFlowCommand(final String id, final String correlationId) {
+    private CommandMessage buildDeleteFlowCommand(String id, String correlationId) {
         FlowDto flow = new FlowDto();
         flow.setFlowId(id);
         FlowDeleteRequest data = new FlowDeleteRequest(flow);
@@ -343,7 +359,7 @@ public class FlowServiceImpl implements FlowService {
      * {@inheritDoc}
      */
     @Override
-    public CompletableFuture<FlowIdStatusPayload> statusFlow(final String id) {
+    public CompletableFuture<FlowIdStatusPayload> statusFlow(String id) {
         logger.debug("Flow status request for flow: {}", id);
         return getFlowReadResponse(id, RequestCorrelationId.getId())
                 .thenApply(FlowReadResponse::getPayload)
@@ -354,9 +370,9 @@ public class FlowServiceImpl implements FlowService {
      * {@inheritDoc}
      */
     @Override
-    public CompletableFuture<FlowPathPayload> pathFlow(final String id) {
+    public CompletableFuture<FlowPathPayload> pathFlow(String id) {
         logger.debug("Flow path request for flow {}", id);
-        final String correlationId = RequestCorrelationId.getId();
+        String correlationId = RequestCorrelationId.getId();
 
         GetFlowPathRequest data = new GetFlowPathRequest(id);
         CommandMessage request = new CommandMessage(data, System.currentTimeMillis(), correlationId);
@@ -452,7 +468,7 @@ public class FlowServiceImpl implements FlowService {
      * There are only minor differences between push and unpush .. this utility function helps
      */
     private CompletableFuture<BatchResults> flowPushUnpush(List<FlowInfoData> externalFlows, FlowOperation op) {
-        final String correlationId = RequestCorrelationId.getId();
+        String correlationId = RequestCorrelationId.getId();
         String collect = externalFlows.stream().map(FlowInfoData::getFlowId).collect(Collectors.joining());
         logger.debug("Flow {}: id: {}", op, collect);
         logger.debug("Size of list: {}", externalFlows.size());
@@ -503,7 +519,7 @@ public class FlowServiceImpl implements FlowService {
      */
     @Override
     public CompletableFuture<FlowResponsePayload> swapFlowPaths(String flowId) {
-        final String correlationId = RequestCorrelationId.getId();
+        String correlationId = RequestCorrelationId.getId();
         logger.info("Swapping paths for flow : {}", flowId);
 
         FlowPathSwapRequest payload = new FlowPathSwapRequest(flowId, null);
@@ -535,7 +551,7 @@ public class FlowServiceImpl implements FlowService {
      * {@inheritDoc}
      */
     @Override
-    public CompletableFuture<List<FlowValidationDto>> validateFlow(final String flowId) {
+    public CompletableFuture<List<FlowValidationDto>> validateFlow(String flowId) {
         logger.debug("Validate flow request for flow {}", flowId);
         CommandMessage message = new CommandMessage(new FlowValidationRequest(flowId),
                 System.currentTimeMillis(), RequestCorrelationId.getId());
@@ -551,7 +567,7 @@ public class FlowServiceImpl implements FlowService {
     public CompletableFuture<PingOutput> pingFlow(String flowId, PingInput payload) {
         FlowPingRequest request = new FlowPingRequest(flowId, payload.getTimeoutMillis());
 
-        final String correlationId = RequestCorrelationId.getId();
+        String correlationId = RequestCorrelationId.getId();
         CommandMessage message = new CommandMessage(
                 request, System.currentTimeMillis(), correlationId, Destination.WFM);
 
@@ -622,7 +638,7 @@ public class FlowServiceImpl implements FlowService {
      */
     @Override
     public CompletableFuture<SwapFlowEndpointPayload> swapFlowEndpoint(SwapFlowEndpointPayload input) {
-        final String correlationId = RequestCorrelationId.getId();
+        String correlationId = RequestCorrelationId.getId();
         logger.info("Swap endpoints for flow {} and {}", input.getFirstFlow().getFlowId(),
                 input.getSecondFlow().getFlowId());
 

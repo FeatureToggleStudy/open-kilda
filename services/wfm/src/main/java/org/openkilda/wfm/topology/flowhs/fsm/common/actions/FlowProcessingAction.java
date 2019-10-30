@@ -13,7 +13,7 @@
  *   limitations under the License.
  */
 
-package org.openkilda.wfm.topology.flowhs.fsm.common.action;
+package org.openkilda.wfm.topology.flowhs.fsm.common.actions;
 
 import static java.lang.String.format;
 
@@ -24,11 +24,13 @@ import org.openkilda.persistence.FetchStrategy;
 import org.openkilda.persistence.PersistenceManager;
 import org.openkilda.persistence.repositories.FlowPathRepository;
 import org.openkilda.persistence.repositories.FlowRepository;
+import org.openkilda.persistence.repositories.RepositoryFactory;
+import org.openkilda.wfm.share.history.model.FlowDumpData;
+import org.openkilda.wfm.share.history.model.FlowEventData;
 import org.openkilda.wfm.share.history.model.FlowHistoryData;
 import org.openkilda.wfm.share.history.model.FlowHistoryHolder;
 import org.openkilda.wfm.topology.flowhs.exception.FlowProcessingException;
-import org.openkilda.wfm.topology.flowhs.fsm.common.WithContextStateMachine;
-import org.openkilda.wfm.topology.flowhs.service.FlowHistorySupportingCarrier;
+import org.openkilda.wfm.topology.flowhs.fsm.common.FlowProcessingStateMachine;
 
 import lombok.extern.slf4j.Slf4j;
 import org.squirrelframework.foundation.fsm.AnonymousAction;
@@ -36,27 +38,28 @@ import org.squirrelframework.foundation.fsm.AnonymousAction;
 import java.time.Instant;
 
 @Slf4j
-public abstract class FlowProcessingAction<T extends WithContextStateMachine<T, S, E, C>, S, E, C>
+public abstract class FlowProcessingAction<T extends FlowProcessingStateMachine<T, S, E, C>, S, E, C>
         extends AnonymousAction<T, S, E, C> {
-
     protected final PersistenceManager persistenceManager;
     protected final FlowRepository flowRepository;
     protected final FlowPathRepository flowPathRepository;
 
     public FlowProcessingAction(PersistenceManager persistenceManager) {
         this.persistenceManager = persistenceManager;
-        this.flowRepository = persistenceManager.getRepositoryFactory().createFlowRepository();
-        this.flowPathRepository = persistenceManager.getRepositoryFactory().createFlowPathRepository();
+        RepositoryFactory repositoryFactory = persistenceManager.getRepositoryFactory();
+        this.flowRepository = repositoryFactory.createFlowRepository();
+        this.flowPathRepository = repositoryFactory.createFlowPathRepository();
     }
 
     @Override
     public final void execute(S from, S to, E event, C context, T stateMachine) {
         try {
             perform(from, to, event, context, stateMachine);
-        } catch (Exception e) {
-            log.error("Failed to process flow request", e);
-
-            stateMachine.fireError();
+        } catch (Exception ex) {
+            String errorMessage = format("%s: %s", getGenericErrorMessage(), ex.getMessage());
+            log.error(errorMessage, ex);
+            saveHistory(stateMachine, errorMessage);
+            stateMachine.fireError(errorMessage);
         }
     }
 
@@ -82,21 +85,60 @@ public abstract class FlowProcessingAction<T extends WithContextStateMachine<T, 
                 .orElseThrow(() -> new FlowProcessingException(format("Flow path %s not found", pathId)));
     }
 
-    protected void saveHistory(T stateMachine, FlowHistorySupportingCarrier carrier, String flowId, String action) {
-        saveHistory(stateMachine, carrier, flowId, action, null);
+    /**
+     * Returns a message for generic error that may happen during action execution.
+     * The message is being returned as the execution result.
+     */
+    protected String getGenericErrorMessage() {
+        return "Failed to process flow request";
     }
 
-    protected void saveHistory(T stateMachine, FlowHistorySupportingCarrier carrier, String flowId, String action,
-                               String description) {
+    protected void saveHistory(T stateMachine, String action) {
+        saveHistory(stateMachine, action, null);
+    }
+
+    protected void saveHistory(T stateMachine, String action, String description) {
         FlowHistoryHolder historyHolder = FlowHistoryHolder.builder()
                 .taskId(stateMachine.getCommandContext().getCorrelationId())
                 .flowHistoryData(FlowHistoryData.builder()
                         .action(action)
                         .time(Instant.now())
-                        .flowId(flowId)
+                        .flowId(stateMachine.getFlowId())
                         .description(description)
                         .build())
                 .build();
-        carrier.sendHistoryUpdate(historyHolder);
+        stateMachine.getCarrier().sendHistoryUpdate(historyHolder);
+    }
+
+    protected void saveHistoryWithEvent(T stateMachine, String action, FlowEventData.Event event) {
+        Instant timestamp = Instant.now();
+        FlowHistoryHolder historyHolder = FlowHistoryHolder.builder()
+                .taskId(stateMachine.getCommandContext().getCorrelationId())
+                .flowHistoryData(FlowHistoryData.builder()
+                        .action(action)
+                        .time(timestamp)
+                        .flowId(stateMachine.getFlowId())
+                        .build())
+                .flowEventData(FlowEventData.builder()
+                        .flowId(stateMachine.getFlowId())
+                        .event(event)
+                        .time(timestamp)
+                        .build())
+                .build();
+        stateMachine.getCarrier().sendHistoryUpdate(historyHolder);
+    }
+
+    protected void saveHistoryWithDump(T stateMachine, String action, String description, FlowDumpData flowDumpData) {
+        FlowHistoryHolder historyHolder = FlowHistoryHolder.builder()
+                .taskId(stateMachine.getCommandContext().getCorrelationId())
+                .flowDumpData(flowDumpData)
+                .flowHistoryData(FlowHistoryData.builder()
+                        .action(action)
+                        .time(Instant.now())
+                        .description(description)
+                        .flowId(stateMachine.getFlowId())
+                        .build())
+                .build();
+        stateMachine.getCarrier().sendHistoryUpdate(historyHolder);
     }
 }

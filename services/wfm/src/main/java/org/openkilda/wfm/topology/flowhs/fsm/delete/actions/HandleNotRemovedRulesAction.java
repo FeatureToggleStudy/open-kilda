@@ -19,6 +19,8 @@ import org.openkilda.floodlight.flow.request.RemoveRule;
 import org.openkilda.floodlight.flow.response.FlowErrorResponse;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteContext;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.Event;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.State;
 
 import lombok.extern.slf4j.Slf4j;
 import org.squirrelframework.foundation.fsm.AnonymousAction;
@@ -27,13 +29,9 @@ import java.util.HashSet;
 import java.util.UUID;
 
 @Slf4j
-public class HandleNotRemovedRulesAction
-        extends AnonymousAction<FlowDeleteFsm, FlowDeleteFsm.State, FlowDeleteFsm.Event, FlowDeleteContext> {
-
+public class HandleNotRemovedRulesAction extends AnonymousAction<FlowDeleteFsm, State, Event, FlowDeleteContext> {
     @Override
-    public void execute(FlowDeleteFsm.State from, FlowDeleteFsm.State to,
-                        FlowDeleteFsm.Event event, FlowDeleteContext context,
-                        FlowDeleteFsm stateMachine) {
+    public void execute(State from, State to, Event event, FlowDeleteContext context, FlowDeleteFsm stateMachine) {
         if (!stateMachine.getPendingCommands().isEmpty() || !stateMachine.getErrorResponses().isEmpty()) {
             for (UUID commandId : stateMachine.getPendingCommands()) {
                 RemoveRule nonDeletedRule = stateMachine.getRemoveCommands().get(commandId);

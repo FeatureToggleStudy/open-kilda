@@ -34,26 +34,30 @@ import org.openkilda.wfm.share.flow.resources.ResourceAllocationException;
 import org.openkilda.wfm.share.logger.FlowOperationsDashboardLogger;
 import org.openkilda.wfm.topology.flow.model.FlowPathPair;
 import org.openkilda.wfm.topology.flowhs.exception.FlowProcessingException;
+import org.openkilda.wfm.topology.flowhs.fsm.common.actions.BaseResourceAllocationAction;
 import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteContext;
 import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm;
+import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm.Event;
+import org.openkilda.wfm.topology.flowhs.fsm.reroute.FlowRerouteFsm.State;
 
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class AllocateProtectedResourcesAction extends BaseResourceAllocationAction {
-    public AllocateProtectedResourcesAction(PersistenceManager persistenceManager, PathComputer pathComputer,
-                                            FlowResourcesManager resourcesManager,
+public class AllocateProtectedResourcesAction extends
+        BaseResourceAllocationAction<FlowRerouteFsm, State, Event, FlowRerouteContext> {
+    public AllocateProtectedResourcesAction(PersistenceManager persistenceManager, int transactionRetriesLimit,
+                                            PathComputer pathComputer, FlowResourcesManager resourcesManager,
                                             FlowOperationsDashboardLogger dashboardLogger) {
-        super(persistenceManager, pathComputer, resourcesManager, dashboardLogger);
+        super(persistenceManager, transactionRetriesLimit, pathComputer, resourcesManager, dashboardLogger);
     }
 
     @Override
-    protected boolean isAllocationRequired(FlowRerouteContext context, FlowRerouteFsm stateMachine) {
+    protected boolean isAllocationRequired(FlowRerouteFsm stateMachine) {
         return stateMachine.isRerouteProtected();
     }
 
     @Override
-    protected void allocate(FlowRerouteContext context, FlowRerouteFsm stateMachine)
+    protected void allocate(FlowRerouteFsm stateMachine)
             throws RecoverableException, UnroutableFlowException, ResourceAllocationException {
         String flowId = stateMachine.getFlowId();
         Flow flow = flowRepository.findById(flowId)
@@ -116,7 +120,7 @@ public class AllocateProtectedResourcesAction extends BaseResourceAllocationActi
                         .forward(flow.getForwardPath())
                         .reverse(flow.getReversePath())
                         .build();
-                saveHistory(stateMachine, flow, oldPaths, paths);
+                saveHistoryWithDump(stateMachine, flow, oldPaths, paths);
             } else {
                 log.debug("Found the same protected path for flow {}. Skip creating of it.", flowId);
             }
@@ -124,7 +128,7 @@ public class AllocateProtectedResourcesAction extends BaseResourceAllocationActi
     }
 
     @Override
-    protected void onFailure(FlowRerouteContext context, FlowRerouteFsm stateMachine) {
+    protected void onFailure(FlowRerouteFsm stateMachine) {
         stateMachine.setNewProtectedResources(null);
         stateMachine.setNewProtectedForwardPath(null);
         stateMachine.setNewProtectedReversePath(null);

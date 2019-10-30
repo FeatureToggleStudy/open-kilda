@@ -33,6 +33,5 @@ public abstract class WithContextStateMachine<T extends StateMachine<T, S, E, C>
 
     public abstract void fireNext(C context);
 
-    public abstract void fireError();
-
+    public abstract void fireError(String errorReason);
 }

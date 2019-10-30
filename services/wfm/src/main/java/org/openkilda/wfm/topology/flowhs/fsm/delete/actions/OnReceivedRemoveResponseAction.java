@@ -22,6 +22,7 @@ import org.openkilda.floodlight.flow.response.FlowResponse;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteContext;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.Event;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.State;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -30,10 +31,8 @@ import java.util.UUID;
 @Slf4j
 public class OnReceivedRemoveResponseAction extends RuleProcessingAction {
     @Override
-    protected void perform(FlowDeleteFsm.State from, FlowDeleteFsm.State to,
-                           FlowDeleteFsm.Event event, FlowDeleteContext context,
-                           FlowDeleteFsm stateMachine) {
-        FlowResponse response = context.getFlowResponse();
+    protected void perform(State from, State to, Event event, FlowDeleteContext context, FlowDeleteFsm stateMachine) {
+        FlowResponse response = context.getSpeakerFlowResponse();
         if (!response.isSuccess() || response instanceof FlowErrorResponse) {
             throw new IllegalArgumentException(
                     format("Invoked %s for an error response: %s", this.getClass(), response));
@@ -56,9 +55,9 @@ public class OnReceivedRemoveResponseAction extends RuleProcessingAction {
                         stateMachine.getFlowId());
                 stateMachine.fire(Event.RULES_REMOVED);
             } else {
-                log.warn("Received error response(s) for some remove commands of the flow {}",
-                        stateMachine.getFlowId());
-                stateMachine.fireError();
+                log.warn(format("Received error response(s) for %d remove commands of the flow %s",
+                        stateMachine.getErrorResponses().size(), stateMachine.getFlowId()));
+                stateMachine.fire(Event.RULES_REMOVED);
             }
         }
     }

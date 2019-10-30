@@ -25,9 +25,11 @@ import org.openkilda.wfm.share.flow.resources.EncapsulationResources;
 import org.openkilda.wfm.share.flow.resources.FlowResources;
 import org.openkilda.wfm.share.flow.resources.FlowResources.PathResources;
 import org.openkilda.wfm.share.flow.resources.FlowResourcesManager;
-import org.openkilda.wfm.topology.flowhs.fsm.common.action.FlowProcessingAction;
+import org.openkilda.wfm.topology.flowhs.fsm.common.actions.FlowProcessingAction;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteContext;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.Event;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.State;
 import org.openkilda.wfm.topology.flowhs.service.FlowCommandBuilder;
 import org.openkilda.wfm.topology.flowhs.service.FlowCommandBuilderFactory;
 
@@ -43,23 +45,19 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class RemoveRulesAction extends
-        FlowProcessingAction<FlowDeleteFsm, FlowDeleteFsm.State, FlowDeleteFsm.Event, FlowDeleteContext> {
-
+public class RemoveRulesAction extends FlowProcessingAction<FlowDeleteFsm, State, Event, FlowDeleteContext> {
     private final FlowResourcesManager resourcesManager;
     private final FlowCommandBuilderFactory commandBuilderFactory;
 
     public RemoveRulesAction(PersistenceManager persistenceManager, FlowResourcesManager resourcesManager) {
         super(persistenceManager);
-        this.resourcesManager = resourcesManager;
 
+        this.resourcesManager = resourcesManager;
         commandBuilderFactory = new FlowCommandBuilderFactory(resourcesManager);
     }
 
     @Override
-    protected void perform(FlowDeleteFsm.State from, FlowDeleteFsm.State to,
-                           FlowDeleteFsm.Event event, FlowDeleteContext context,
-                           FlowDeleteFsm stateMachine) {
+    protected void perform(State from, State to, Event event, FlowDeleteContext context, FlowDeleteFsm stateMachine) {
         Flow flow = getFlow(stateMachine.getFlowId());
         Set<PathId> pathIds = new HashSet<>(flow.getFlowPathIds());
 
@@ -130,8 +128,7 @@ public class RemoveRulesAction extends
 
         log.debug("Commands for removing rules have been sent for the flow {}", stateMachine.getFlowId());
 
-        saveHistory(stateMachine, stateMachine.getCarrier(), stateMachine.getFlowId(),
-                "Remove commands for old rules have been sent.");
+        saveHistory(stateMachine, "Remove commands for old rules have been sent.");
     }
 
     private FlowResources buildResources(Flow flow, FlowPath forwardPath, FlowPath reversePath) {

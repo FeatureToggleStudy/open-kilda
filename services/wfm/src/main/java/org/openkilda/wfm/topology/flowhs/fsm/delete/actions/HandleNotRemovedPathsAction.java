@@ -18,9 +18,11 @@ package org.openkilda.wfm.topology.flowhs.fsm.delete.actions;
 import org.openkilda.model.Flow;
 import org.openkilda.model.FlowPath;
 import org.openkilda.persistence.PersistenceManager;
-import org.openkilda.wfm.topology.flowhs.fsm.common.action.FlowProcessingAction;
+import org.openkilda.wfm.topology.flowhs.fsm.common.actions.FlowProcessingAction;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteContext;
 import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.Event;
+import org.openkilda.wfm.topology.flowhs.fsm.delete.FlowDeleteFsm.State;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -28,16 +30,14 @@ import java.util.Objects;
 
 @Slf4j
 public class HandleNotRemovedPathsAction
-        extends FlowProcessingAction<FlowDeleteFsm, FlowDeleteFsm.State, FlowDeleteFsm.Event, FlowDeleteContext> {
+        extends FlowProcessingAction<FlowDeleteFsm, State, Event, FlowDeleteContext> {
 
     public HandleNotRemovedPathsAction(PersistenceManager persistenceManager) {
         super(persistenceManager);
     }
 
     @Override
-    protected void perform(FlowDeleteFsm.State from, FlowDeleteFsm.State to,
-                           FlowDeleteFsm.Event event, FlowDeleteContext context,
-                           FlowDeleteFsm stateMachine) {
+    protected void perform(State from, State to, Event event, FlowDeleteContext context, FlowDeleteFsm stateMachine) {
         Flow flow = getFlow(stateMachine.getFlowId());
         FlowPath[] paths = flow.getPaths().stream().filter(Objects::nonNull).toArray(FlowPath[]::new);
         log.warn("Failed to remove paths {}", paths);

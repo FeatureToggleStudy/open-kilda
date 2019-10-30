@@ -21,11 +21,13 @@ import org.openkilda.wfm.CommandContext;
 import org.squirrelframework.foundation.fsm.StateMachine;
 
 public abstract class NbTrackableStateMachine<T extends StateMachine<T, S, E, C>, S, E, C>
-        extends WithContextStateMachine<T, S, E, C> {
+        extends FlowProcessingStateMachine<T, S, E, C> {
 
     public NbTrackableStateMachine(CommandContext commandContext) {
         super(commandContext);
     }
 
     public abstract void sendResponse(Message message);
+
+    public abstract void fireNoPathFound(String errorReason);
 }

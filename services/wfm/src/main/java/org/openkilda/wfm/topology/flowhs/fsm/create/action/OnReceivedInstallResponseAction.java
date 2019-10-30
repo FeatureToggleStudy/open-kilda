@@ -32,7 +32,6 @@ import java.util.UUID;
 
 @Slf4j
 public class OnReceivedInstallResponseAction extends OnReceivedResponseAction {
-
     public OnReceivedInstallResponseAction(PersistenceManager persistenceManager) {
         super(persistenceManager);
     }
@@ -49,7 +48,9 @@ public class OnReceivedInstallResponseAction extends OnReceivedResponseAction {
                 log.debug("Received responses of all pending commands. Total failed commands: {}",
                         stateMachine.getFailedCommands().size());
                 stateMachine.getFailedCommands().clear();
-                stateMachine.fireError();
+                String errorMessage = format("Received error response(s) for %d commands of the flow %s",
+                        stateMachine.getFailedCommands().size(), stateMachine.getFlowId());
+                stateMachine.fireError(errorMessage);
             }
         }
     }
@@ -70,7 +71,7 @@ public class OnReceivedInstallResponseAction extends OnReceivedResponseAction {
 
         if (response.isSuccess()) {
             log.debug("Rule {} was installed on switch {}", installRule.getCookie(), response.getSwitchId());
-            saveHistory(stateMachine, stateMachine.getCarrier(), stateMachine.getFlowId(), "Rule installed",
+            saveHistory(stateMachine, "Rule installed",
                     format("Rule was installed successfully: cookie %s, switch %s",
                             installRule.getCookie(), response.getSwitchId()));
         } else {
@@ -85,7 +86,6 @@ public class OnReceivedInstallResponseAction extends OnReceivedResponseAction {
                 command.getCookie(), errorResponse.getSwitchId(), errorResponse.getErrorCode(),
                 errorResponse.getDescription());
         log.error(message);
-        saveHistory(stateMachine, stateMachine.getCarrier(), stateMachine.getFlowId(), "Rule not installed",
-                message);
+        saveHistory(stateMachine, "Rule not installed", message);
     }
 }

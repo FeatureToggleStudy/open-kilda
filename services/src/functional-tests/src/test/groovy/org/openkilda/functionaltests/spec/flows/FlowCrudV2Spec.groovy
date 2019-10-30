@@ -560,7 +560,7 @@ class FlowCrudV2Spec extends HealthCheckSpecification {
         flowInfo.pinned
 
         when: "Update the flow (pinned=false)"
-        northbound.updateFlow(flowInfo.id, flowInfo.tap { it.pinned = false })
+        northboundV2.updateFlow(flowInfo.id, flowHelperV2.toV2(flowInfo.tap { it.pinned = false }))
 
         then: "The pinned option is disabled"
         def newFlowInfo = northbound.getFlow(flow.flowId)
@@ -584,7 +584,7 @@ class FlowCrudV2Spec extends HealthCheckSpecification {
         flowInfo.pinned
 
         when: "Update the flow (pinned=false)"
-        northbound.updateFlow(flowInfo.id, flowInfo.tap { it.pinned = false })
+        northboundV2.updateFlow(flowInfo.id, flowHelperV2.toV2(flowInfo.tap { it.pinned = false }))
 
         then: "The pinned option is disabled"
         def newFlowInfo = northbound.getFlow(flow.flowId)
@@ -651,7 +651,7 @@ class FlowCrudV2Spec extends HealthCheckSpecification {
         def protectedForwardCookie = flowInfoFromDb.protectedForwardPath.cookie.value
         def protectedReverseCookie = flowInfoFromDb.protectedReversePath.cookie.value
         def protectedFlowPath = northbound.getFlowPath(flow.flowId).protectedPath.forwardPath
-        northbound.updateFlow(flowInfo.id, flowInfo.tap { it.allocateProtectedPath = false })
+        northboundV2.updateFlow(flowInfo.id, flowHelperV2.toV2(flowInfo.tap { it.allocateProtectedPath = false }))
 
         then: "Protected path is disabled"
         !northbound.getFlowPath(flow.flowId).protectedPath
@@ -732,7 +732,7 @@ class FlowCrudV2Spec extends HealthCheckSpecification {
         flowInfo.maxLatency = newMaxLatency
         flowInfo.description = newDescription
         flowInfo.periodicPings = newPeriodicPing
-        northbound.updateFlow(flowInfo.id, flowInfo)
+        northboundV2.updateFlow(flowInfo.id, flowHelperV2.toV2(flowInfo))
 
         then: "Flow is updated correctly"
         def newFlowInfo = northbound.getFlow(flow.flowId)

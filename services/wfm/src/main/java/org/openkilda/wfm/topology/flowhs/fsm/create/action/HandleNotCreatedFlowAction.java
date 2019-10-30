@@ -29,7 +29,6 @@ import org.squirrelframework.foundation.fsm.AnonymousAction;
 
 @Slf4j
 public class HandleNotCreatedFlowAction extends AnonymousAction<FlowCreateFsm, State, Event, FlowCreateContext> {
-
     private final FlowRepository flowRepository;
     private final FlowOperationsDashboardLogger dashboardLogger;
 

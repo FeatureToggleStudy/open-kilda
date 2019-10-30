@@ -36,7 +36,6 @@ import java.util.UUID;
 
 @Slf4j
 public class ValidateIngressRulesAction extends RuleProcessingAction {
-
     private final SwitchRepository switchRepository;
 
     public ValidateIngressRulesAction(PersistenceManager persistenceManager) {
@@ -44,9 +43,8 @@ public class ValidateIngressRulesAction extends RuleProcessingAction {
     }
 
     @Override
-    protected void perform(State from, State to,
-                           Event event, FlowRerouteContext context, FlowRerouteFsm stateMachine) {
-        FlowResponse response = context.getFlowResponse();
+    protected void perform(State from, State to, Event event, FlowRerouteContext context, FlowRerouteFsm stateMachine) {
+        FlowResponse response = context.getSpeakerFlowResponse();
         UUID commandId = response.getCommandId();
         stateMachine.getPendingCommands().remove(commandId);
 
@@ -60,9 +58,8 @@ public class ValidateIngressRulesAction extends RuleProcessingAction {
                     .orElseThrow(() -> new IllegalStateException(format("Failed to find switch %s",
                             expected.getSwitchId())));
 
-            RulesValidator validator =
-                    new IngressRulesValidator(expected, (FlowRuleResponse) context.getFlowResponse(),
-                            switchObj.getFeatures());
+            RulesValidator validator = new IngressRulesValidator(expected, (FlowRuleResponse) response,
+                    switchObj.getFeatures());
             if (validator.validate()) {
                 String message = format("Ingress rule %s has been validated successfully on switch %s",
                         expected.getCookie(), expected.getSwitchId());
