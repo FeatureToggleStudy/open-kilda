@@ -10,6 +10,7 @@ import org.openkilda.functionaltests.helpers.Wrappers
 import org.openkilda.messaging.info.event.IslChangeType
 import org.openkilda.messaging.info.event.SwitchChangeType
 import org.openkilda.messaging.model.system.FeatureTogglesDto
+import org.openkilda.messaging.model.system.KildaConfigurationDto
 import org.openkilda.testing.model.topology.TopologyDefinition
 import org.openkilda.testing.service.labservice.LabService
 import org.openkilda.testing.service.lockkeeper.LockKeeperService
@@ -43,7 +44,10 @@ class EnvExtension extends AbstractGlobalExtension implements SpringContextListe
     String profile
     
     @Value('${use.hs}')
-    boolean useHs    
+    boolean useHs
+
+    @Value('${use.multitable}')
+    boolean useMultitable
 
     @Override
     void start() {
@@ -76,6 +80,9 @@ class EnvExtension extends AbstractGlobalExtension implements SpringContextListe
                 .floodlightRoutePeriodicSync(true)
                 .build()
         northbound.toggleFeature(features)
+
+        //TODO(andriidovhan) use it when kildaConfiguration is updated with multitable
+        //northbound.updateKildaConfiguration(new KildaConfigurationDto(multitable: useMultitable))
 
         labService.flushLabs()
         Wrappers.wait(WAIT_OFFSET) {
