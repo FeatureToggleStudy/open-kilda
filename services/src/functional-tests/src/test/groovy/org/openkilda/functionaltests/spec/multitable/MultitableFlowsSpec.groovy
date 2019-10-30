@@ -10,6 +10,7 @@ import org.openkilda.functionaltests.extension.tags.Tags
 import org.openkilda.functionaltests.helpers.PathHelper
 import org.openkilda.messaging.info.event.PathNode
 import org.openkilda.model.SwitchFeature
+import org.openkilda.northbound.dto.v1.flows.PingInput
 import org.openkilda.testing.model.topology.TopologyDefinition.Switch
 import org.openkilda.testing.service.traffexam.TraffExamService
 import org.openkilda.testing.tools.FlowTrafficExamBuilder
@@ -58,8 +59,9 @@ mode with existing flows and hold flows of different table-mode types"() {
             })
         }
         def flow = flowHelperV2.randomFlow(swPair)
+        flow.allocateProtectedPath = true
 
-        when: "Create the prepared hybrid flow"
+        when: "Create the prepared hybrid protected flow"
         flowHelperV2.addFlow(flow)
         assert PathHelper.convert(northbound.getFlowPath(flow.flowId)) == desiredPath
 
@@ -75,7 +77,7 @@ mode with existing flows and hold flows of different table-mode types"() {
         }
 
         and: "Flow is pingable"
-        verifyAll(northbound.pingFlow(flow.flowId)) {
+        verifyAll(northbound.pingFlow(flow.flowId, new PingInput())) {
             it.forward.pingSuccess
             it.reverse.pingSuccess
         }
@@ -112,7 +114,7 @@ mode with existing flows and hold flows of different table-mode types"() {
                 validation.verifyMeterSectionsAreEmpty(["missing", "excess", "misconfigured"])
             }
         }
-        verifyAll(northbound.pingFlow(flow.flowId)) {
+        verifyAll(northbound.pingFlow(flow.flowId, new PingInput())) {
             it.forward.pingSuccess
             it.reverse.pingSuccess
         }
@@ -141,7 +143,7 @@ mode with existing flows and hold flows of different table-mode types"() {
 
         and: "Both flows are pingable"
         [flow, flow2].each {
-            verifyAll(northbound.pingFlow(it.flowId)) {
+            verifyAll(northbound.pingFlow(it.flowId, new PingInput())) {
                 it.forward.pingSuccess
                 it.reverse.pingSuccess
             }
@@ -167,5 +169,8 @@ mode with existing flows and hold flows of different table-mode types"() {
 
         when: "Synchronize all involved switches"
         then:""
+
+        and: "Delete flows"
+        [flow, flow2].each { flowHelper.deleteFlow(it.flowId) }
     }
 }

@@ -136,7 +136,9 @@ switch(#sw.dpId, install-action=#data.installRulesAction)"(Map data, Switch sw) 
         setup: "Enabled multitable switch property on a switch(if it is not enabled yet)"
         def initSwitchProperty = northbound.getSwitchProperties(sw.dpId)
         def multitableIsEnabled = initSwitchProperty.multiTable
-        multitableIsEnabled ?: northbound.updateSwitchProperties(multiTable: true)
+        multitableIsEnabled ?: northbound.updateSwitchProperties(sw.dpId, northbound.getSwitchProperties(sw.dpId).tap {
+            it.multiTable = true
+        })
 
         and: "Delete all rules"
         def defaultRules = northbound.getSwitchRules(sw.dpId).flowEntries
@@ -298,7 +300,9 @@ switch (#sw.dpId, delete-action=#data.deleteRulesAction)"(Map data, Switch sw) {
         setup: "Enabled multitable switch property on a switch(if it is not enabled yet)"
         def initSwitchProperty = northbound.getSwitchProperties(sw.dpId)
         def multitableIsEnabled = initSwitchProperty.multiTable
-        multitableIsEnabled ?: northbound.updateSwitchProperties(multiTable: true)
+        multitableIsEnabled ?: northbound.updateSwitchProperties(sw.dpId, northbound.getSwitchProperties(sw.dpId).tap {
+            it.multiTable = true
+        })
 
         when: "Delete rule from the switch"
         def defaultRules = northbound.getSwitchRules(sw.dpId).flowEntries
