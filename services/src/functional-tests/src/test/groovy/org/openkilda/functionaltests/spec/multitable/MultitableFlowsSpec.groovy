@@ -5,12 +5,15 @@ import static org.junit.Assume.assumeTrue
 import static org.openkilda.functionaltests.extension.tags.Tag.SMOKE
 import static org.openkilda.functionaltests.extension.tags.Tag.SMOKE_SWITCHES
 import static org.openkilda.testing.Constants.RULES_INSTALLATION_TIME
+import static org.openkilda.testing.Constants.WAIT_OFFSET
 
 import org.openkilda.functionaltests.HealthCheckSpecification
 import org.openkilda.functionaltests.extension.tags.Tags
 import org.openkilda.functionaltests.helpers.PathHelper
 import org.openkilda.functionaltests.helpers.Wrappers
+import org.openkilda.messaging.info.event.IslChangeType
 import org.openkilda.messaging.info.event.PathNode
+import org.openkilda.messaging.payload.flow.FlowState
 import org.openkilda.model.SwitchFeature
 import org.openkilda.model.SwitchId
 import org.openkilda.northbound.dto.v1.flows.PingInput
@@ -35,7 +38,7 @@ mode with existing flows and hold flows of different table-mode types"() {
         List<PathNode> desiredPath = null
         List<Switch> involvedSwitches = null
         def allTraffgenSwitchIds = topology.activeTraffGens*.switchConnected.dpId ?:
-                assumeTrue("Should be at least two active traffgens connected to switches",false)
+                assumeTrue("Should be at least two active traffgens connected to switches", false)
         def swPair = topologyHelper.allNotNeighboringSwitchPairs.collectMany { [it, it.reversed] }.find { pair ->
             desiredPath = pair.paths.find { path ->
                 involvedSwitches = pathHelper.getInvolvedSwitches(path)
@@ -200,7 +203,8 @@ mode with existing flows and hold flows of different table-mode types"() {
         def flow = flowHelperV2.randomFlow(switchPair)
         flow.allocateProtectedPath = true
         flowHelperV2.addFlow(flow)
-        assert PathHelper.convert(northbound.getFlowPath(flow.flowId)) == desiredPath
+        def flowPathInfo = northbound.getFlowPath(flow.flowId)
+        assert PathHelper.convert(flowPathInfo) == desiredPath
 
         then: "Flow rules are created in multi table mode"
         def flowInfoFromDb = database.getFlow(flow.flowId)
@@ -223,8 +227,8 @@ mode with existing flows and hold flows of different table-mode types"() {
 
         when: "Update switch properties(multi_table: false) on the src switch"
         updateSwitchProps(involvedSwitches[0].dpId, northbound.getSwitchProperties(involvedSwitches[0].dpId).tap {
-                    it.multiTable = false
-                })
+            it.multiTable = false
+        })
 
         then: "Flow rules are still multi table mode"
         Wrappers.wait(RULES_INSTALLATION_TIME) {
@@ -270,8 +274,8 @@ mode with existing flows and hold flows of different table-mode types"() {
 
         when: "Update switch properties(multi_table: false) on the transit switch"
         updateSwitchProps(involvedSwitches[1].dpId, northbound.getSwitchProperties(involvedSwitches[1].dpId).tap {
-                    it.multiTable = false
-                })
+            it.multiTable = false
+        })
 
         then: "Flow rules are still in multi table mode on the transit and dst switches"
         Wrappers.wait(RULES_INSTALLATION_TIME) {
@@ -292,10 +296,8 @@ mode with existing flows and hold flows of different table-mode types"() {
             }
         }
 
-        when: "Update the flow"
-        northbound.updateFlow(flow.flowId, northbound.getFlow(flow.flowId).tap {
-            it.description = it.description + " updated"
-        })
+        when: "Reroute(intentional) the flow"
+        northboundV2.rerouteFlow(flow.flowId)
 
         then: "Flow rules on the transit switch are recreated in single table mode"
         def flowInfoFromDb3 = database.getFlow(flow.flowId)
@@ -320,8 +322,8 @@ mode with existing flows and hold flows of different table-mode types"() {
 
         when: "Update switch properties(multi_table: false) on the dst switch"
         updateSwitchProps(involvedSwitches[2].dpId, northbound.getSwitchProperties(involvedSwitches[2].dpId).tap {
-                    it.multiTable = false
-                })
+            it.multiTable = false
+        })
 
         then: "Flow rules are still in multi table mode on the dst switches"
         Wrappers.wait(RULES_INSTALLATION_TIME) {
@@ -341,10 +343,13 @@ mode with existing flows and hold flows of different table-mode types"() {
             }
         }
 
-        when: "Reroute the flow"
-        northboundV2.rerouteFlow(flow.flowId)
+        and: "Swap main and protected path"
+        def currentProtectedPath = pathHelper.convert(flowPathInfo.protectedPath)
+        northbound.swapFlowPath(flow.flowId)
+        def newFlowPath = pathHelper.convert(northbound.getFlowPath(flow.flowId))
+        assert newFlowPath == currentProtectedPath
 
-        then: "Flow rules on the dst switch are recreated in single table mode"
+        then: "Flow rules on the dst switch are recreated in single table mode" //TODO should or shouldnt recreate rules
         def flowInfoFromDb4 = database.getFlow(flow.flowId)
         Wrappers.wait(RULES_INSTALLATION_TIME) {
             verifyAll(northbound.getSwitchRules(involvedSwitches[2].dpId).flowEntries) { rules ->
@@ -363,11 +368,65 @@ mode with existing flows and hold flows of different table-mode types"() {
             }
         }
 
+        when: "Update switch properties(multi_table: true) on the src switch"
+        updateSwitchProps(involvedSwitches[0].dpId, northbound.getSwitchProperties(involvedSwitches[2].dpId).tap {
+            it.multiTable = true
+        })
+
+        and: "Update the flow"
+        northbound.updateFlow(flow.flowId, northbound.getFlow(flow.flowId).tap {
+            it.allocateProtectedPath = false
+        })
+
+        then: "Flow rules on the src switch are recreated in multi table mode"
+        def flowInfoFromDb5 = database.getFlow(flow.flowId)
+        Wrappers.wait(RULES_INSTALLATION_TIME) {
+            verifyAll(northbound.getSwitchRules(involvedSwitches[0].dpId).flowEntries) { rules ->
+                rules.find { it.cookie == flowInfoFromDb5.forwardPath.cookie.value }.tableId == 2
+                rules.find { it.cookie == flowInfoFromDb5.reversePath.cookie.value }.tableId == 4
+            }
+            verifyAll(northbound.getSwitchRules(involvedSwitches[2].dpId).flowEntries) { rules ->
+                rules.find { it.cookie == flowInfoFromDb5.forwardPath.cookie.value }.tableId == 0
+                rules.find { it.cookie == flowInfoFromDb5.reversePath.cookie.value }.tableId == 0
+            }
+        }
+
+        when: "Update switch properties(multi_table: true) on the dst switch"
+        updateSwitchProps(involvedSwitches[2].dpId, northbound.getSwitchProperties(involvedSwitches[2].dpId).tap {
+            it.multiTable = true
+        })
+
+        and: "Init auto reroute(Fail a flow ISL (bring switch port down))"
+        def flowIsls = pathHelper.getInvolvedIsls(newFlowPath)
+        def islToBreak = flowIsls[0]
+        antiflap.portDown(islToBreak.srcSwitch.dpId, islToBreak.srcPort)
+        Wrappers.wait(rerouteDelay + WAIT_OFFSET) {
+            assert northbound.getFlowStatus(flow.flowId).status == FlowState.UP
+            assert PathHelper.convert(northbound.getFlowPath(flow.flowId)) != newFlowPath
+        }
+
+        then: "Flow rules on the dst switch are recreated in multi table mode"
+        def flowInfoFromDb6 = database.getFlow(flow.flowId)
+        Wrappers.wait(RULES_INSTALLATION_TIME) {
+            verifyAll(northbound.getSwitchRules(involvedSwitches[2].dpId).flowEntries) { rules ->
+                rules.find { it.cookie == flowInfoFromDb6.forwardPath.cookie.value }.tableId == 4
+                rules.find { it.cookie == flowInfoFromDb6.reversePath.cookie.value }.tableId == 2
+            }
+            verifyAll(northbound.getSwitchRules(involvedSwitches[0].dpId).flowEntries) { rules ->
+                rules.find { it.cookie == flowInfoFromDb6.forwardPath.cookie.value }.tableId == 2
+                rules.find { it.cookie == flowInfoFromDb6.reversePath.cookie.value }.tableId == 4
+            }
+        }
+
         cleanup: "Restore init switch properties and delete the flow"
+        antiflap.portUp(islToBreak.srcSwitch.dpId, islToBreak.srcPort)
         flowHelper.deleteFlow(flow.flowId)
-        involvedSwitches[0].each { updateSwitchProps(it.dpId, initSrcSwProps)}
-        involvedSwitches[1].each { updateSwitchProps(it.dpId, initTransitSwProps)}
-        involvedSwitches[2].each { updateSwitchProps(it.dpId, initDstSwProps)}
+        involvedSwitches[0].each { updateSwitchProps(it.dpId, initSrcSwProps) }
+        involvedSwitches[1].each { updateSwitchProps(it.dpId, initTransitSwProps) }
+        involvedSwitches[2].each { updateSwitchProps(it.dpId, initDstSwProps) }
+        Wrappers.wait(discoveryInterval + WAIT_OFFSET) {
+            northbound.getAllLinks().each { assert it.state != IslChangeType.FAILED }
+        }
         database.resetCosts()
     }
 
@@ -454,7 +513,7 @@ mode with existing flows and hold flows of different table-mode types"() {
             }
         }
 
-        when: "Reroute the flow"
+        when: "Reroute(intentional) the flow"
         northboundV2.rerouteFlow(flow.flowId)
 
         then: "Flow rules on the switch are recreated in single table mode"
