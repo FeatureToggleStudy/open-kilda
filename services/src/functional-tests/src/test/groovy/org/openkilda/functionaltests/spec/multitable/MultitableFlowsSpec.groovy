@@ -12,7 +12,9 @@ import org.openkilda.functionaltests.helpers.PathHelper
 import org.openkilda.functionaltests.helpers.Wrappers
 import org.openkilda.messaging.info.event.PathNode
 import org.openkilda.model.SwitchFeature
+import org.openkilda.model.SwitchId
 import org.openkilda.northbound.dto.v1.flows.PingInput
+import org.openkilda.northbound.dto.v1.switches.SwitchPropertiesDto
 import org.openkilda.testing.model.topology.TopologyDefinition.Switch
 import org.openkilda.testing.service.traffexam.TraffExamService
 import org.openkilda.testing.tools.FlowTrafficExamBuilder
@@ -51,16 +53,11 @@ mode with existing flows and hold flows of different table-mode types"() {
 
         //Change switch properties so that path switches are multi -> single -> multi -> single -table
         [involvedSwitches[0], involvedSwitches[2]].each {
-            northbound.updateSwitchProperties(it.dpId, northbound.getSwitchProperties(it.dpId).tap {
-                it.multiTable = true
-            })
+            updateSwitchProps(it.dpId, northbound.getSwitchProperties(it.dpId).tap { it.multiTable = true })
         }
         [involvedSwitches[1], involvedSwitches[3]].each {
-            northbound.updateSwitchProperties(it.dpId, northbound.getSwitchProperties(it.dpId).tap {
-                it.multiTable = false
-            })
+            updateSwitchProps(it.dpId, northbound.getSwitchProperties(it.dpId).tap { it.multiTable = false })
         }
-        involvedSwitches.each { northbound.synchronizeSwitch(it.dpId, true) }
 
         when: "Create the prepared hybrid protected flow"
         def flow = flowHelperV2.randomFlow(swPair)
@@ -98,14 +95,10 @@ mode with existing flows and hold flows of different table-mode types"() {
 
         when: "Update table mode for involved switches so that it becomes 'single -> multi -> single -> multi'"
         [involvedSwitches[0], involvedSwitches[2]].each {
-            northbound.updateSwitchProperties(it.dpId, northbound.getSwitchProperties(it.dpId).tap {
-                it.multiTable = false
-            })
+            updateSwitchProps(it.dpId, northbound.getSwitchProperties(it.dpId).tap { it.multiTable = false })
         }
         [involvedSwitches[1], involvedSwitches[3]].each {
-            northbound.updateSwitchProperties(it.dpId, northbound.getSwitchProperties(it.dpId).tap {
-                it.multiTable = true
-            })
+            updateSwitchProps(it.dpId, northbound.getSwitchProperties(it.dpId).tap { it.multiTable = true })
         }
 
         then: "Flow remains valid and pingable, switch validation passes"
@@ -169,11 +162,9 @@ mode with existing flows and hold flows of different table-mode types"() {
             }
         }
 
-        when: "Synchronize all involved switches"
-        then:""
-
         and: "Delete flows"
         [flow, flow2].each { flowHelper.deleteFlow(it.flowId) }
+        database.resetCosts()
     }
 
     def "Flow rules are (re)installed according to switch property while rerouting/syncing/updating"() {
@@ -198,22 +189,12 @@ mode with existing flows and hold flows of different table-mode types"() {
         def multitableSrcSwIsEnabled = initSrcSwProps.multiTable
         def multitableTransitSwIsEnabled = initTransitSwProps.multiTable
         def multitableDstSwIsEnabled = initDstSwProps.multiTable
-        multitableSrcSwIsEnabled ?: northbound.updateSwitchProperties(involvedSwitches[0].dpId,
-                northbound.getSwitchProperties(involvedSwitches[0].dpId).tap {
-                    it.multiTable = true
-                })
-        multitableTransitSwIsEnabled ?: northbound.updateSwitchProperties(involvedSwitches[1].dpId,
-                northbound.getSwitchProperties(involvedSwitches[1].dpId).tap {
-                    it.multiTable = true
-                })
-        multitableDstSwIsEnabled ?: northbound.updateSwitchProperties(involvedSwitches[2].dpId,
-                northbound.getSwitchProperties(involvedSwitches[2].dpId).tap {
-                    it.multiTable = true
-                })
-        // synchronize for deleting missing/excess rules
-        [involvedSwitches[0].dpId, involvedSwitches[1].dpId, involvedSwitches[2].dpId].each {
-            northbound.synchronizeSwitch(it, true)
-        }
+        multitableSrcSwIsEnabled ?: updateSwitchProps(involvedSwitches[0].dpId,
+                northbound.getSwitchProperties(involvedSwitches[0].dpId).tap { it.multiTable = true })
+        multitableTransitSwIsEnabled ?: updateSwitchProps(involvedSwitches[1].dpId,
+                northbound.getSwitchProperties(involvedSwitches[1].dpId).tap { it.multiTable = true })
+        multitableDstSwIsEnabled ?: updateSwitchProps(involvedSwitches[2].dpId,
+                northbound.getSwitchProperties(involvedSwitches[2].dpId).tap { it.multiTable = true })
 
         when: "Create a flow"
         def flow = flowHelperV2.randomFlow(switchPair)
@@ -241,11 +222,9 @@ mode with existing flows and hold flows of different table-mode types"() {
         }
 
         when: "Update switch properties(multi_table: false) on the src switch"
-        northbound.updateSwitchProperties(involvedSwitches[0].dpId,
-                northbound.getSwitchProperties(involvedSwitches[0].dpId).tap {
+        updateSwitchProps(involvedSwitches[0].dpId, northbound.getSwitchProperties(involvedSwitches[0].dpId).tap {
                     it.multiTable = false
                 })
-        northbound.synchronizeSwitch(involvedSwitches[0].dpId, true)
 
         then: "Flow rules are still multi table mode"
         Wrappers.wait(RULES_INSTALLATION_TIME) {
@@ -277,6 +256,7 @@ mode with existing flows and hold flows of different table-mode types"() {
                 rules.find { it.cookie == flowInfoFromDb2.protectedReversePath.cookie.value }.tableId == 0
             }
         }
+
         and: "Rules on the transit and dst switches are still in multi table mode"
         verifyAll(northbound.getSwitchRules(involvedSwitches[1].dpId).flowEntries) { rules ->
             rules.find { it.cookie == flowInfoFromDb2.forwardPath.cookie.value }.tableId == 6
@@ -289,11 +269,9 @@ mode with existing flows and hold flows of different table-mode types"() {
         }
 
         when: "Update switch properties(multi_table: false) on the transit switch"
-        northbound.updateSwitchProperties(involvedSwitches[1].dpId,
-                northbound.getSwitchProperties(involvedSwitches[1].dpId).tap {
+        updateSwitchProps(involvedSwitches[1].dpId, northbound.getSwitchProperties(involvedSwitches[1].dpId).tap {
                     it.multiTable = false
                 })
-        northbound.synchronizeSwitch(involvedSwitches[1].dpId, true)
 
         then: "Flow rules are still in multi table mode on the transit and dst switches"
         Wrappers.wait(RULES_INSTALLATION_TIME) {
@@ -314,8 +292,10 @@ mode with existing flows and hold flows of different table-mode types"() {
             }
         }
 
-        when: "Reroute the flow"
-        northboundV2.rerouteFlow(flow.flowId)
+        when: "Update the flow"
+        northbound.updateFlow(flow.flowId, northbound.getFlow(flow.flowId).tap {
+            it.description = it.description + " updated"
+        })
 
         then: "Flow rules on the transit switch are recreated in single table mode"
         def flowInfoFromDb3 = database.getFlow(flow.flowId)
@@ -330,6 +310,7 @@ mode with existing flows and hold flows of different table-mode types"() {
                 rules.find { it.cookie == flowInfoFromDb3.protectedReversePath.cookie.value }.tableId == 0
             }
         }
+
         and: "Flow rules on the dst switch are still in multi table mode"
         verifyAll(northbound.getSwitchRules(involvedSwitches[2].dpId).flowEntries) { rules ->
             rules.find { it.cookie == flowInfoFromDb3.forwardPath.cookie.value }.tableId == 4
@@ -338,11 +319,9 @@ mode with existing flows and hold flows of different table-mode types"() {
         }
 
         when: "Update switch properties(multi_table: false) on the dst switch"
-        northbound.updateSwitchProperties(involvedSwitches[2].dpId,
-                northbound.getSwitchProperties(involvedSwitches[2].dpId).tap {
+        updateSwitchProps(involvedSwitches[2].dpId, northbound.getSwitchProperties(involvedSwitches[2].dpId).tap {
                     it.multiTable = false
                 })
-        northbound.synchronizeSwitch(involvedSwitches[2].dpId, true)
 
         then: "Flow rules are still in multi table mode on the dst switches"
         Wrappers.wait(RULES_INSTALLATION_TIME) {
@@ -362,10 +341,8 @@ mode with existing flows and hold flows of different table-mode types"() {
             }
         }
 
-        when: "Update the flow"
-        northbound.updateFlow(flow.flowId, northbound.getFlow(flow.flowId).tap {
-            it.description = it.description + " updated"
-        })
+        when: "Reroute the flow"
+        northboundV2.rerouteFlow(flow.flowId)
 
         then: "Flow rules on the dst switch are recreated in single table mode"
         def flowInfoFromDb4 = database.getFlow(flow.flowId)
@@ -388,8 +365,14 @@ mode with existing flows and hold flows of different table-mode types"() {
 
         cleanup: "Restore init switch properties and delete the flow"
         flowHelper.deleteFlow(flow.flowId)
-        multitableSrcSwIsEnabled ?: northbound.updateSwitchProperties(involvedSwitches[0].dpId, initSrcSwProps)
-        multitableTransitSwIsEnabled ?: northbound.updateSwitchProperties(involvedSwitches[1].dpId, initTransitSwProps)
-        multitableDstSwIsEnabled ?: northbound.updateSwitchProperties(involvedSwitches[2].dpId, initDstSwProps)
+        involvedSwitches[0].each { updateSwitchProps(it.dpId, initSrcSwProps)}
+        involvedSwitches[1].each { updateSwitchProps(it.dpId, initTransitSwProps)}
+        involvedSwitches[2].each { updateSwitchProps(it.dpId, initDstSwProps)}
+        database.resetCosts()
+    }
+
+    void updateSwitchProps(SwitchId switchId, SwitchPropertiesDto swProps) {
+        northbound.updateSwitchProperties(switchId, swProps)
+        northbound.synchronizeSwitch(switchId, true)
     }
 }
