@@ -13,22 +13,27 @@
  *   limitations under the License.
  */
 
-package org.openkilda.wfm.topology.switchmanager.service;
+package org.openkilda.messaging.command.switches;
 
 import org.openkilda.messaging.command.CommandData;
-import org.openkilda.messaging.command.flow.RemoveFlow;
-import org.openkilda.messaging.info.rule.FlowEntry;
 import org.openkilda.model.SwitchId;
-import org.openkilda.wfm.error.SwitchPropertiesNotFoundException;
 
-import java.util.List;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
 
-public interface CommandBuilder {
+@Data
+@AllArgsConstructor
+@EqualsAndHashCode(callSuper = false)
+public abstract class BaseTelescopeRuleRequest extends CommandData {
 
-    List<CommandData> buildCommandsToSyncMissingRules(SwitchId switchId, List<Long> switchRules)
-            throws SwitchPropertiesNotFoundException;
+    @JsonProperty("switch_id")
+    private SwitchId switchId;
 
-    List<RemoveFlow> buildCommandsToRemoveExcessRules(SwitchId switchId,
-                                                      List<FlowEntry> flows,
-                                                      List<Long> excessRulesCookies);
+    @JsonProperty("telescope_cookie")
+    private long telescopeCookie;
+
+    @JsonProperty("metadata")
+    private int metadata;
 }

@@ -13,39 +13,28 @@
  *   limitations under the License.
  */
 
-package org.openkilda.messaging.command.flow;
+package org.openkilda.messaging.command.switches;
 
-import org.openkilda.messaging.command.CommandData;
+import org.openkilda.model.SwitchId;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.Value;
 
-@Value
-@EqualsAndHashCode(callSuper = false)
-public class UpdateIngressAndEgressFlows extends CommandData {
-
-    @JsonProperty("ingress_flow")
-    private InstallIngressFlow installIngressFlow;
-
-    @JsonProperty("egress_flow")
-    private InstallEgressFlow installEgressFlow;
+@Data
+@EqualsAndHashCode(callSuper = true)
+public class InstallTelescopeRuleRequest extends BaseTelescopeRuleRequest {
 
     @JsonProperty("telescope_port")
     private int telescopePort;
 
-    @JsonProperty("telescope_cookie")
-    private long telescopeCookie;
-
     @JsonCreator
-    public UpdateIngressAndEgressFlows(@JsonProperty("ingress_flow") InstallIngressFlow installIngressFlow,
-                                       @JsonProperty("egress_flow") InstallEgressFlow installEgressFlow,
+    public InstallTelescopeRuleRequest(@JsonProperty("switch_id") SwitchId switchId,
                                        @JsonProperty("telescope_port") int telescopePort,
-                                       @JsonProperty("telescope_cookie") long telescopeCookie) {
-        this.installIngressFlow = installIngressFlow;
-        this.installEgressFlow = installEgressFlow;
+                                       @JsonProperty("telescope_cookie") long telescopeCookie,
+                                       @JsonProperty("metadata") int metadata) {
+        super(switchId, telescopeCookie, metadata);
         this.telescopePort = telescopePort;
-        this.telescopeCookie = telescopeCookie;
     }
 }

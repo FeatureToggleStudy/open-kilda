@@ -22,6 +22,8 @@ import org.openkilda.persistence.TransactionManager;
 import org.openkilda.persistence.repositories.ApplicationRepository;
 
 import com.google.common.collect.Lists;
+import org.neo4j.ogm.cypher.ComparisonOperator;
+import org.neo4j.ogm.cypher.Filter;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -42,8 +44,9 @@ public class Neo4jApplicationRepository extends Neo4jGenericRepository<Applicati
     @Override
     public Optional<ApplicationRule> lookupRuleByMatchAndFlow(SwitchId switchId, String flowId, String srcIp,
                                                                 Integer srcPort, String dstIp, Integer dstPort,
-                                                                String proto, String ethType) {
-        Map<String, Object> parameters = getBaseParameters(switchId, srcIp, srcPort, dstIp, dstPort, proto, ethType);
+                                                                String proto, String ethType, Integer metadata) {
+        Map<String, Object> parameters =
+                getBaseParameters(switchId, srcIp, srcPort, dstIp, dstPort, proto, ethType, metadata);
         parameters.put("flow_id", flowId);
 
         String query = "MATCH (ar:application_rule) "
@@ -63,8 +66,9 @@ public class Neo4jApplicationRepository extends Neo4jGenericRepository<Applicati
     @Override
     public Optional<ApplicationRule> lookupRuleByMatchAndCookie(SwitchId switchId, Long cookie, String srcIp,
                                                                 Integer srcPort, String dstIp, Integer dstPort,
-                                                                String proto, String ethType) {
-        Map<String, Object> parameters = getBaseParameters(switchId, srcIp, srcPort, dstIp, dstPort, proto, ethType);
+                                                                String proto, String ethType, Integer metadata) {
+        Map<String, Object> parameters =
+                getBaseParameters(switchId, srcIp, srcPort, dstIp, dstPort, proto, ethType, metadata);
         parameters.put("cookie", cookie);
 
         String query = "MATCH (ar:application_rule) "
@@ -81,8 +85,13 @@ public class Neo4jApplicationRepository extends Neo4jGenericRepository<Applicati
         return processQuery(parameters, query);
     }
 
-    private Map<String, Object> getBaseParameters(SwitchId switchId, String srcIp, Integer srcPort,
-                                                  String dstIp, Integer dstPort, String proto, String ethType) {
+    @Override
+    public Collection<ApplicationRule> findBySwitchId(SwitchId switchId) {
+        return loadAll(new Filter("switch_id", ComparisonOperator.EQUALS, switchId));
+    }
+
+    private Map<String, Object> getBaseParameters(SwitchId switchId, String srcIp, Integer srcPort, String dstIp,
+                                                  Integer dstPort, String proto, String ethType, Integer metadata) {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("switch_id", switchId.toString());
         parameters.put("src_ip", srcIp);
@@ -91,6 +100,7 @@ public class Neo4jApplicationRepository extends Neo4jGenericRepository<Applicati
         parameters.put("dst_port", dstPort);
         parameters.put("proto", proto);
         parameters.put("eth_type", ethType);
+        parameters.put("metadata", metadata);
 
         return parameters;
     }

@@ -28,10 +28,10 @@ import org.openkilda.messaging.command.apps.FlowAddAppRequest;
 import org.openkilda.messaging.command.apps.FlowRemoveAppRequest;
 import org.openkilda.messaging.command.flow.InstallEgressFlow;
 import org.openkilda.messaging.command.flow.InstallIngressFlow;
-import org.openkilda.messaging.command.flow.UpdateIngressAndEgressFlows;
-import org.openkilda.messaging.command.flow.UpdateOneSwitchFlows;
 import org.openkilda.messaging.command.switches.InstallExclusionRequest;
+import org.openkilda.messaging.command.switches.InstallTelescopeRuleRequest;
 import org.openkilda.messaging.command.switches.RemoveExclusionRequest;
+import org.openkilda.messaging.command.switches.RemoveTelescopeRuleRequest;
 import org.openkilda.messaging.info.apps.AppsEntry;
 import org.openkilda.messaging.info.apps.FlowAppsResponse;
 import org.openkilda.model.ApplicationRule;
@@ -106,7 +106,9 @@ public class AppsManagerService {
     /**
      * Process adding application for flow endpoint or endpoints.
      */
-    public void addFlowApplication(FlowAddAppRequest payload) throws FlowNotFoundException {
+    public void addFlowApplication(FlowAddAppRequest payload)
+            throws FlowNotFoundException, SwitchPropertiesNotFoundException {
+
         FlowApplication application = convertApplicationFromString(payload.getApplication());
         Flow flow = getFlow(payload.getFlowId());
 
@@ -122,13 +124,15 @@ public class AppsManagerService {
         sendResponse(flow);
     }
 
-    private void addTelescopeForFlow(Flow flow) {
-        transactionManager.doInTransaction(() -> {
+    private void addTelescopeForFlow(Flow flow) throws SwitchPropertiesNotFoundException {
+        Flow updatedFlow = transactionManager.doInTransaction(() -> {
             addAppToFlowPath(flow.getForwardPath(), FlowApplication.TELESCOPE);
             addAppToFlowPath(flow.getReversePath(), FlowApplication.TELESCOPE);
-            sendUpdateFlowEndpointRulesCommand(flow);
+            return flow;
         });
-        sendAppCreateNotification(flow.getFlowId(), FlowApplication.TELESCOPE);
+        sendUpdateFlowEndpointRulesCommands(updatedFlow);
+        installTelescopeRule(updatedFlow.getSrcSwitch().getSwitchId(), updatedFlow);
+        sendAppCreateNotification(updatedFlow.getFlowId(), FlowApplication.TELESCOPE);
     }
 
     private void addAppToFlowPath(FlowPath flowPath, FlowApplication application) {
@@ -165,13 +169,14 @@ public class AppsManagerService {
     }
 
     private void removeTelescopeForFlow(Flow flow) {
-        transactionManager.doInTransaction(() -> {
-            sendUpdateFlowEndpointRulesCommand(flow);
+        Flow updatedFlow = transactionManager.doInTransaction(() -> {
             removeAppFromFlowPath(flow.getForwardPath(), FlowApplication.TELESCOPE);
             removeAppFromFlowPath(flow.getReversePath(), FlowApplication.TELESCOPE);
-            sendUpdateFlowEndpointRulesCommand(flow);
+            return flow;
         });
-        sendAppRemoveNotification(flow.getFlowId(), FlowApplication.TELESCOPE);
+        sendUpdateFlowEndpointRulesCommands(updatedFlow);
+        removeTelescopeRule(updatedFlow.getSrcSwitch().getSwitchId(), updatedFlow);
+        sendAppRemoveNotification(updatedFlow.getFlowId(), FlowApplication.TELESCOPE);
     }
 
     private void removeAppFromFlowPath(FlowPath flowPath, FlowApplication application) {
@@ -212,30 +217,48 @@ public class AppsManagerService {
         return FlowApplication.valueOf(application.toUpperCase());
     }
 
-    private void sendUpdateFlowEndpointRulesCommand(Flow flow) throws SwitchPropertiesNotFoundException {
+    private void sendUpdateFlowEndpointRulesCommands(Flow flow) {
         if (!flow.isOneSwitchFlow()) {
-            carrier.emitSpeakerCommand(buildUpdateFlowEndpointRulesCommand(flow));
+            updateFlowEndpointRules(flow);
         } else {
-            carrier.emitSpeakerCommand(buildUpdateOneSwitchRulesCommand(flow));
+            updateOneSwitchFlowRules(flow);
         }
     }
 
-    private UpdateIngressAndEgressFlows buildUpdateFlowEndpointRulesCommand(Flow flow)
-            throws SwitchPropertiesNotFoundException {
-        SwitchId switchId = flow.getSrcSwitch().getSwitchId();
+    private void updateFlowEndpointRules(Flow flow) {
+        EncapsulationResources encapsulationResources = getEncapsulationResources(flow, flow.getForwardPath());
+        carrier.emitSpeakerCommand(buildIngressRuleCommand(flow, flow.getForwardPath(), encapsulationResources));
+        carrier.emitSpeakerCommand(buildEgressRuleCommand(flow, flow.getReversePath(), encapsulationResources));
+    }
+
+    private void updateOneSwitchFlowRules(Flow flow) {
+        carrier.emitSpeakerCommand(flowCommandFactory.makeOneSwitchRule(flow, flow.getForwardPath()));
+        carrier.emitSpeakerCommand(flowCommandFactory.makeOneSwitchRule(flow, flow.getReversePath()));
+    }
+
+    private void installTelescopeRule(SwitchId switchId, Flow flow) throws SwitchPropertiesNotFoundException {
         SwitchProperties switchProperties = switchPropertiesRepository.findBySwitchId(switchId)
                 .orElseThrow(() -> new SwitchPropertiesNotFoundException(switchId));
         Objects.requireNonNull(switchProperties.getTelescopePort(),
                 format("Telescope port for switch '%s' is not set", switchId));
 
-        Cookie cookie = flow.getForwardPath().getCookie();
-        Cookie telescopeCookie = Cookie.buildTelescopeCookie(cookie.getUnmaskedValue(), cookie.isMaskedAsForward());
-        return new UpdateIngressAndEgressFlows(buildIngressRuleCommand(flow, flow.getForwardPath()),
-                buildEgressRuleCommand(flow, flow.getReversePath()), switchProperties.getTelescopePort(),
-                telescopeCookie.getValue());
+        EncapsulationResources encapsulationResources = getEncapsulationResources(flow, flow.getForwardPath());
+        carrier.emitSpeakerCommand(new InstallTelescopeRuleRequest(switchId, switchProperties.getTelescopePort(),
+                buildTelescopeCookie(flow), encapsulationResources.getTransitEncapsulationId()));
     }
 
-    private InstallIngressFlow buildIngressRuleCommand(Flow flow, FlowPath flowPath) {
+    private void removeTelescopeRule(SwitchId switchId, Flow flow) {
+        EncapsulationResources encapsulationResources = getEncapsulationResources(flow, flow.getForwardPath());
+        carrier.emitSpeakerCommand(new RemoveTelescopeRuleRequest(switchId, buildTelescopeCookie(flow),
+                encapsulationResources.getTransitEncapsulationId()));
+    }
+
+    private long buildTelescopeCookie(Flow flow) {
+        return Cookie.buildTelescopeCookie(flow.getForwardPath().getCookie().getUnmaskedValue()).getValue();
+    }
+
+    private InstallIngressFlow buildIngressRuleCommand(Flow flow, FlowPath flowPath,
+                                                       EncapsulationResources encapsulationResources) {
         List<PathSegment> segments = flowPath.getSegments();
         requireSegments(segments);
 
@@ -244,13 +267,13 @@ public class AppsManagerService {
             throw new IllegalStateException(
                     format("FlowSegment was not found for ingress flow rule, flowId: %s", flow.getFlowId()));
         }
-        EncapsulationResources encapsulationResources = getEncapsulationResources(flow, flowPath);
 
         return flowCommandFactory.buildInstallIngressFlow(flow, flowPath, ingressSegment.getSrcPort(),
                 encapsulationResources);
     }
 
-    private InstallEgressFlow buildEgressRuleCommand(Flow flow, FlowPath flowPath) {
+    private InstallEgressFlow buildEgressRuleCommand(Flow flow, FlowPath flowPath,
+                                                     EncapsulationResources encapsulationResources) {
         List<PathSegment> segments = flowPath.getSegments();
         requireSegments(segments);
 
@@ -259,7 +282,6 @@ public class AppsManagerService {
             throw new IllegalStateException(
                     format("FlowSegment was not found for egress flow rule, flowId: %s", flow.getFlowId()));
         }
-        EncapsulationResources encapsulationResources = getEncapsulationResources(flow, flowPath);
 
         return flowCommandFactory.buildInstallEgressFlow(flowPath, egressSegment.getDestPort(), encapsulationResources);
     }
@@ -278,33 +300,21 @@ public class AppsManagerService {
         }
     }
 
-    private UpdateOneSwitchFlows buildUpdateOneSwitchRulesCommand(Flow flow) throws SwitchPropertiesNotFoundException {
-        SwitchId switchId = flow.getSrcSwitch().getSwitchId();
-        SwitchProperties switchProperties = switchPropertiesRepository.findBySwitchId(switchId)
-                .orElseThrow(() -> new SwitchPropertiesNotFoundException(switchId));
-        Objects.requireNonNull(switchProperties.getTelescopePort(),
-                format("Telescope port for switch '%s' is not set", switchId));
-
-        Cookie cookie = flow.getForwardPath().getCookie();
-        Cookie telescopeCookie = Cookie.buildTelescopeCookie(cookie.getUnmaskedValue(), cookie.isMaskedAsForward());
-        return new UpdateOneSwitchFlows(flowCommandFactory.makeOneSwitchRule(flow, flow.getForwardPath()),
-                flowCommandFactory.makeOneSwitchRule(flow, flow.getReversePath()), switchProperties.getTelescopePort(),
-                telescopeCookie.getValue());
-    }
-
     /**
      * Create exclusion for the flow.
      */
     public void processCreateExclusion(CreateExclusion payload)
             throws FlowNotFoundException, ExclusionAlreadyExistException {
         Flow flow = getFlow(payload.getFlowId());
+        EncapsulationResources encapsulationResources = getEncapsulationResources(flow, flow.getForwardPath());
 
         checkTelescopeAppInstallation(flow);
 
         Exclusion exclusion = payload.getExclusion();
         Optional<ApplicationRule> ruleOptional = applicationRepository.lookupRuleByMatchAndFlow(
                 flow.getSrcSwitch().getSwitchId(), flow.getFlowId(), exclusion.getSrcIp(), exclusion.getSrcPort(),
-                exclusion.getDstIp(), exclusion.getDstPort(), exclusion.getProto(), exclusion.getEthType());
+                exclusion.getDstIp(), exclusion.getDstPort(), exclusion.getProto(), exclusion.getEthType(),
+                encapsulationResources.getTransitEncapsulationId());
         if (ruleOptional.isPresent()) {
             throw new ExclusionAlreadyExistException(exclusion);
         }
@@ -325,11 +335,11 @@ public class AppsManagerService {
                 .ethType(exclusion.getEthType())
                 .timeCreate(Instant.now())
                 .expirationTimeout(expirationTimeout)
+                .metadata(encapsulationResources.getTransitEncapsulationId())
                 .build();
 
         applicationRepository.createOrUpdate(rule);
 
-        EncapsulationResources encapsulationResources = getEncapsulationResources(flow, flow.getForwardPath());
         carrier.emitSpeakerCommand(InstallExclusionRequest.builder()
                 .switchId(flow.getSrcSwitch().getSwitchId())
                 .cookie(cookie.getValue())
@@ -357,7 +367,8 @@ public class AppsManagerService {
     public void processRemoveExclusion(RemoveExclusionRequest payload) {
         Optional<ApplicationRule> ruleOptional = applicationRepository.lookupRuleByMatchAndCookie(
                 payload.getSwitchId(), payload.getCookie(), payload.getSrcIp(), payload.getSrcPort(),
-                payload.getDstIp(), payload.getDstPort(), payload.getProto(), payload.getEthType());
+                payload.getDstIp(), payload.getDstPort(), payload.getProto(), payload.getEthType(),
+                payload.getTunnelId());
         if (!ruleOptional.isPresent()) {
             return;
         }
@@ -372,6 +383,7 @@ public class AppsManagerService {
     public void processRemoveExclusion(RemoveExclusion payload)
             throws FlowNotFoundException, ExclusionNotFoundException {
         Flow flow = getFlow(payload.getFlowId());
+        EncapsulationResources encapsulationResources = getEncapsulationResources(flow, flow.getForwardPath());
 
         checkTelescopeAppInstallation(flow);
 
@@ -379,15 +391,14 @@ public class AppsManagerService {
 
         Optional<ApplicationRule> ruleOptional = applicationRepository.lookupRuleByMatchAndFlow(
                 flow.getSrcSwitch().getSwitchId(), flow.getFlowId(), exclusion.getSrcIp(), exclusion.getSrcPort(),
-                exclusion.getDstIp(), exclusion.getDstPort(), exclusion.getProto(), exclusion.getEthType());
+                exclusion.getDstIp(), exclusion.getDstPort(), exclusion.getProto(), exclusion.getEthType(),
+                encapsulationResources.getTransitEncapsulationId());
         if (!ruleOptional.isPresent()) {
             throw new ExclusionNotFoundException(exclusion);
         }
         ApplicationRule rule = ruleOptional.get();
         applicationRepository.delete(rule);
         exclusionIdPool.deallocate(flow.getFlowId(), rule.getCookie().getTypeMetadata());
-
-        EncapsulationResources encapsulationResources = getEncapsulationResources(flow, flow.getForwardPath());
         carrier.emitSpeakerCommand(RemoveExclusionRequest.builder()
                 .switchId(flow.getSrcSwitch().getSwitchId())
                 .cookie(rule.getCookie().getValue())

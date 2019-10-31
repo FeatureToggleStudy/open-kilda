@@ -148,7 +148,9 @@ public class AppsManager extends AbstractBolt {
         }
     }
 
-    private void processCommandData(CommandData payload) throws FlowNotFoundException {
+    private void processCommandData(CommandData payload)
+            throws FlowNotFoundException, SwitchPropertiesNotFoundException {
+
         if (payload instanceof FlowAppsReadRequest) {
             service.getEnabledFlowApplications(((FlowAppsReadRequest) payload).getFlowId());
         } else if (payload instanceof FlowAddAppRequest) {

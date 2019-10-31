@@ -72,8 +72,6 @@ import org.openkilda.messaging.command.flow.MeterModifyCommandRequest;
 import org.openkilda.messaging.command.flow.ReinstallDefaultFlowForSwitchManagerRequest;
 import org.openkilda.messaging.command.flow.RemoveFlow;
 import org.openkilda.messaging.command.flow.RemoveFlowForSwitchManagerRequest;
-import org.openkilda.messaging.command.flow.UpdateIngressAndEgressFlows;
-import org.openkilda.messaging.command.flow.UpdateOneSwitchFlows;
 import org.openkilda.messaging.command.switches.ConnectModeRequest;
 import org.openkilda.messaging.command.switches.DeleteRulesAction;
 import org.openkilda.messaging.command.switches.DeleteRulesCriteria;
@@ -86,10 +84,14 @@ import org.openkilda.messaging.command.switches.DumpRulesForSwitchManagerRequest
 import org.openkilda.messaging.command.switches.DumpRulesRequest;
 import org.openkilda.messaging.command.switches.DumpSwitchPortsDescriptionRequest;
 import org.openkilda.messaging.command.switches.GetExpectedDefaultRulesRequest;
+import org.openkilda.messaging.command.switches.InstallExclusionForSwitchManagerRequest;
 import org.openkilda.messaging.command.switches.InstallExclusionRequest;
 import org.openkilda.messaging.command.switches.InstallRulesAction;
+import org.openkilda.messaging.command.switches.InstallTelescopeRuleForSwitchManagerRequest;
+import org.openkilda.messaging.command.switches.InstallTelescopeRuleRequest;
 import org.openkilda.messaging.command.switches.PortConfigurationRequest;
 import org.openkilda.messaging.command.switches.RemoveExclusionRequest;
+import org.openkilda.messaging.command.switches.RemoveTelescopeRuleRequest;
 import org.openkilda.messaging.command.switches.SwitchRulesDeleteRequest;
 import org.openkilda.messaging.command.switches.SwitchRulesInstallRequest;
 import org.openkilda.messaging.error.ErrorData;
@@ -118,7 +120,6 @@ import org.openkilda.messaging.info.switches.SwitchPortsDescription;
 import org.openkilda.messaging.info.switches.SwitchRulesResponse;
 import org.openkilda.messaging.model.NetworkEndpoint;
 import org.openkilda.model.Cookie;
-import org.openkilda.model.FlowApplication;
 import org.openkilda.model.OutputVlanType;
 import org.openkilda.model.PortStatus;
 import org.openkilda.model.SwitchId;
@@ -146,7 +147,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 class RecordHandler implements Runnable {
@@ -251,10 +251,14 @@ class RecordHandler implements Runnable {
             doModifyMeterRequest(message);
         } else if (data instanceof AliveRequest) {
             doAliveRequest(message);
-        } else if (data instanceof UpdateIngressAndEgressFlows) {
-            doProcessUpdateIngressAndEgressFlows(message);
-        } else if (data instanceof UpdateOneSwitchFlows) {
-            doProcessUpdateOneSwitchFlows(message);
+        } else if (data instanceof InstallTelescopeRuleForSwitchManagerRequest) {
+            doInstallTelescopeFlowForSwitchManager(message);
+        } else if (data instanceof InstallExclusionForSwitchManagerRequest) {
+            doInstallExclusionForSwitchManager(message);
+        } else if (data instanceof InstallTelescopeRuleRequest) {
+            doInstallTelescopeFlow(message);
+        } else if (data instanceof RemoveTelescopeRuleRequest) {
+            doRemoveTelescopeFlow(message);
         } else if (data instanceof InstallExclusionRequest) {
             doInstallExclusion(message);
         } else if (data instanceof RemoveExclusionRequest) {
@@ -264,8 +268,37 @@ class RecordHandler implements Runnable {
         }
     }
 
+    private void doInstallExclusionForSwitchManager(CommandMessage message) {
+        InstallExclusionRequest command = (InstallExclusionRequest) message.getData();
+        IKafkaProducerService producerService = getKafkaProducer();
+        String replyToTopic = context.getKafkaSwitchManagerTopic();
+        try {
+            installExclusion(command);
+        } catch (SwitchOperationException e) {
+            logger.error("Installation exclusion on switch {} was unsuccessful", command.getSwitchId(), e);
+            anError(ErrorType.NOT_FOUND)
+                    .withMessage(e.getMessage())
+                    .withDescription("Unable to install exclusion")
+                    .withCorrelationId(message.getCorrelationId())
+                    .withTopic(replyToTopic)
+                    .sendVia(producerService);
+        }
+
+        InfoMessage response = new InfoMessage(new FlowInstallResponse(), System.currentTimeMillis(),
+                message.getCorrelationId());
+        getKafkaProducer().sendMessageAndTrack(replyToTopic, message.getCorrelationId(), response);
+    }
+
     private void doInstallExclusion(CommandMessage message) {
         InstallExclusionRequest command = (InstallExclusionRequest) message.getData();
+        try {
+            installExclusion(command);
+        } catch (SwitchOperationException e) {
+            logger.error("Installation exclusion on switch {} was unsuccessful", command.getSwitchId(), e);
+        }
+    }
+
+    private void installExclusion(InstallExclusionRequest command) throws SwitchOperationException {
         logger.info("Install exclusion on switch {}", command.getSwitchId());
 
         DatapathId dpid = DatapathId.of(command.getSwitchId().toLong());
@@ -279,12 +312,8 @@ class RecordHandler implements Runnable {
         EthType ethType = EthTypeMapper.INSTANCE.convert(command.getEthType());
         int timeout = command.getExpirationTimeout();
 
-        try {
-            context.getSwitchManager()
-                    .installExclusion(dpid, cookie, srcIp, srcPort, dstIp, dstPort, proto, ethType, tunnelId, timeout);
-        } catch (SwitchOperationException e) {
-            logger.error("Installation exclusion on switch {} was unsuccessful", command.getSwitchId(), e);
-        }
+        context.getSwitchManager()
+                .installExclusion(dpid, cookie, srcIp, srcPort, dstIp, dstPort, proto, ethType, tunnelId, timeout);
     }
 
     private void doRemoveExclusion(CommandMessage message) {
@@ -400,115 +429,62 @@ class RecordHandler implements Runnable {
                 command.getApplications());
     }
 
-    private void doProcessUpdateIngressAndEgressFlows(CommandMessage message) {
-        UpdateIngressAndEgressFlows commandData = (UpdateIngressAndEgressFlows) message.getData();
-        InstallIngressFlow ingressFlowCommand = commandData.getInstallIngressFlow();
-        InstallEgressFlow egressFlowCommand = commandData.getInstallEgressFlow();
+    private void doInstallTelescopeFlowForSwitchManager(CommandMessage message) {
+        InstallTelescopeRuleRequest commandData = (InstallTelescopeRuleRequest) message.getData();
+        IKafkaProducerService producerService = getKafkaProducer();
+        String replyToTopic = context.getKafkaSwitchManagerTopic();
+        try {
+            installTelescopeFlow(commandData);
+        } catch (SwitchOperationException e) {
+            logger.error("Installing telescope flow with metadata '{}' on switch '{}' was unsuccessful",
+                    commandData.getMetadata(), commandData.getSwitchId(), e);
+            anError(ErrorType.NOT_FOUND)
+                    .withMessage(e.getMessage())
+                    .withDescription("Unable to install telescope flow")
+                    .withCorrelationId(message.getCorrelationId())
+                    .withTopic(replyToTopic)
+                    .sendVia(producerService);
+        }
+
+        InfoMessage response = new InfoMessage(new FlowInstallResponse(), System.currentTimeMillis(),
+                message.getCorrelationId());
+        getKafkaProducer().sendMessageAndTrack(replyToTopic, message.getCorrelationId(), response);
+    }
+
+    private void doInstallTelescopeFlow(CommandMessage message) {
+        InstallTelescopeRuleRequest commandData = (InstallTelescopeRuleRequest) message.getData();
+        try {
+            installTelescopeFlow(commandData);
+        } catch (SwitchOperationException e) {
+            logger.error("Installing telescope flow with metadata '{}' on switch '{}' was unsuccessful",
+                    commandData.getMetadata(), commandData.getSwitchId(), e);
+        }
+    }
+
+    private void installTelescopeFlow(InstallTelescopeRuleRequest commandData) throws SwitchOperationException {
         int telescopePort = commandData.getTelescopePort();
         long telescopeCookie = commandData.getTelescopeCookie();
+        int metadata = commandData.getMetadata();
 
-        logger.info("Updating ingress flow and egress flow with ID '{}' on switch '{}'",
-                ingressFlowCommand.getId(), ingressFlowCommand.getSwitchId());
+        logger.info("Install telescope flow with metadata '{}' on switch '{}'", metadata, commandData.getSwitchId());
 
-        DatapathId dpid = DatapathId.of(ingressFlowCommand.getSwitchId().toLong());
-
-        RemoveFlow removeIngressFlow = buildRemoveFlowCommand(ingressFlowCommand, "UPDATE_INGRESS");
-        RemoveFlow removeEgressFlow = buildRemoveFlowCommand(egressFlowCommand, "UPDATE_EGRESS");
-        try {
-            processDeleteFlow(removeIngressFlow, dpid);
-            processDeleteFlow(removeEgressFlow, dpid);
-
-            installIngressFlow(ingressFlowCommand);
-            installEgressFlow(egressFlowCommand);
-
-            processApplications(ingressFlowCommand.getApplications(), dpid, telescopeCookie,
-                    ingressFlowCommand.getTransitEncapsulationId(), telescopePort);
-        } catch (SwitchOperationException e) {
-            logger.error("Updating ingress rule (cookie = {}) and egress rule (cookie = {}) was unsuccessful",
-                    ingressFlowCommand.getCookie(), egressFlowCommand.getCookie(), e);
-        }
+        DatapathId dpid = DatapathId.of(commandData.getSwitchId().toLong());
+        context.getSwitchManager().installTelescopeFlow(dpid, telescopeCookie, metadata, telescopePort);
     }
 
-    private RemoveFlow buildRemoveFlowCommand(InstallTransitFlow command, String flowId) {
-        DeleteRulesCriteria.DeleteRulesCriteriaBuilder criteria = DeleteRulesCriteria.builder()
-                .cookie(command.getCookie())
-                .encapsulationId(command.getTransitEncapsulationId())
-                .encapsulationType(command.getTransitEncapsulationType())
-                .inPort(command.getInputPort())
-                .outPort(command.getOutputPort());
-        if (command instanceof InstallIngressFlow) {
-            criteria.egressSwitchId(((InstallIngressFlow) command).getEgressSwitchId());
-        }
-
-        RemoveFlow.RemoveFlowBuilder removeCommand = RemoveFlow.builder()
-                .transactionId(UUID.randomUUID())
-                .flowId(flowId)
-                .cookie(command.getCookie())
-                .criteria(criteria.build())
-                .multiTable(command.isMultiTable())
-                .switchId(command.getSwitchId());
-
-        if (command instanceof InstallIngressFlow) {
-            removeCommand.meterId(((InstallIngressFlow) command).getMeterId());
-        }
-
-        return removeCommand.build();
-    }
-
-    private void doProcessUpdateOneSwitchFlows(CommandMessage message) {
-        UpdateOneSwitchFlows commandData = (UpdateOneSwitchFlows) message.getData();
-        InstallOneSwitchFlow forwardOneSwitchFlowCommand = commandData.getForwardOneSwitchFlow();
-        InstallOneSwitchFlow reverseOneSwitchFlowCommand = commandData.getReverseOneSwitchFlow();
-        int telescopePort = commandData.getTelescopePort();
+    private void doRemoveTelescopeFlow(CommandMessage message) {
+        RemoveTelescopeRuleRequest commandData = (RemoveTelescopeRuleRequest) message.getData();
         long telescopeCookie = commandData.getTelescopeCookie();
+        int metadata = commandData.getMetadata();
 
-        logger.info("Updating one switch flows with ID '{}' on switch '{}'",
-                forwardOneSwitchFlowCommand.getId(), forwardOneSwitchFlowCommand.getSwitchId());
+        logger.info("Remove telescope flow with metadata '{}' on switch '{}'", metadata, commandData.getSwitchId());
 
-        DatapathId dpid = DatapathId.of(forwardOneSwitchFlowCommand.getSwitchId().toLong());
-
-        RemoveFlow removeForwardFlow = buildRemoveOneSwitchFlowCommand(forwardOneSwitchFlowCommand, "UPDATE_FORWARD");
-        RemoveFlow removeReverseFlow = buildRemoveOneSwitchFlowCommand(reverseOneSwitchFlowCommand, "UPDATE_REVERSE");
+        DatapathId dpid = DatapathId.of(commandData.getSwitchId().toLong());
         try {
-            processDeleteFlow(removeForwardFlow, dpid);
-            processDeleteFlow(removeReverseFlow, dpid);
-
-            installOneSwitchFlow(forwardOneSwitchFlowCommand);
-            installOneSwitchFlow(reverseOneSwitchFlowCommand);
-
-            processApplications(forwardOneSwitchFlowCommand.getApplications(), dpid, telescopeCookie,
-                    0, telescopePort);
+            context.getSwitchManager().removeTelescopeFlow(dpid, telescopeCookie, metadata);
         } catch (SwitchOperationException e) {
-            logger.error("Updating rule with cookie = {} and rule with cookie = {} was unsuccessful",
-                    forwardOneSwitchFlowCommand.getCookie(), reverseOneSwitchFlowCommand.getCookie(), e);
-        }
-    }
-
-    private RemoveFlow buildRemoveOneSwitchFlowCommand(InstallOneSwitchFlow command, String flowId) {
-        DeleteRulesCriteria criteria = DeleteRulesCriteria.builder()
-                .cookie(command.getCookie())
-                .inPort(command.getInputPort())
-                .outPort(command.getOutputPort())
-                .build();
-
-        return RemoveFlow.builder()
-                .transactionId(UUID.randomUUID())
-                .flowId(flowId)
-                .cookie(command.getCookie())
-                .criteria(criteria)
-                .multiTable(command.isMultiTable())
-                .switchId(command.getSwitchId())
-                .meterId(command.getMeterId())
-                .build();
-    }
-
-    private void processApplications(Set<FlowApplication> applications, DatapathId dpid, long telescopeCookie,
-                                     int tunnelId, int telescopePort) throws SwitchOperationException {
-        if (applications != null && applications.contains(FlowApplication.TELESCOPE)) {
-            context.getSwitchManager()
-                    .installTelescopeFlow(dpid, telescopeCookie, tunnelId, telescopePort);
-        } else {
-            context.getSwitchManager().removeTelescopeFlow(dpid, telescopeCookie, tunnelId);
+            logger.error("Removing ingress rule with metadata '{}' on switch '{}' was unsuccessful",
+                    metadata, commandData.getSwitchId(), e);
         }
     }
 

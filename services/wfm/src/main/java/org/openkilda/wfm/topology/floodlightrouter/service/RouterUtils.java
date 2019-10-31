@@ -30,9 +30,8 @@ import org.openkilda.messaging.command.flow.MeterModifyCommandRequest;
 import org.openkilda.messaging.command.flow.ReinstallDefaultFlowForSwitchManagerRequest;
 import org.openkilda.messaging.command.flow.RemoveFlow;
 import org.openkilda.messaging.command.flow.RemoveFlowForSwitchManagerRequest;
-import org.openkilda.messaging.command.flow.UpdateIngressAndEgressFlows;
-import org.openkilda.messaging.command.flow.UpdateOneSwitchFlows;
 import org.openkilda.messaging.command.stats.StatsRequest;
+import org.openkilda.messaging.command.switches.BaseTelescopeRuleRequest;
 import org.openkilda.messaging.command.switches.ConnectModeRequest;
 import org.openkilda.messaging.command.switches.DeleterMeterForSwitchManagerRequest;
 import org.openkilda.messaging.command.switches.DumpMetersForSwitchManagerRequest;
@@ -135,10 +134,8 @@ public final class RouterUtils {
                 return ((InstallExclusionRequest) commandData).getSwitchId();
             } else if (commandData instanceof RemoveExclusionRequest) {
                 return ((RemoveExclusionRequest) commandData).getSwitchId();
-            } else if (commandData instanceof UpdateIngressAndEgressFlows) {
-                return ((UpdateIngressAndEgressFlows) commandData).getInstallIngressFlow().getSwitchId();
-            } else if (commandData instanceof UpdateOneSwitchFlows) {
-                return ((UpdateOneSwitchFlows) commandData).getForwardOneSwitchFlow().getSwitchId();
+            } else if (commandData instanceof BaseTelescopeRuleRequest) {
+                return ((BaseTelescopeRuleRequest) commandData).getSwitchId();
             }
         }
         return null;

@@ -142,8 +142,8 @@ public class Cookie implements Comparable<Cookie>, Serializable {
         return buildTypedCookie(Cookie.EXCLUSION_COOKIE_TYPE, unmaskedCookie, metadata, true);
     }
 
-    public static Cookie buildTelescopeCookie(Long unmaskedCookie, boolean forward) {
-        return buildTypedCookie(Cookie.TELESCOPE_COOKIE_TYPE, unmaskedCookie, forward);
+    public static Cookie buildTelescopeCookie(Long unmaskedCookie) {
+        return buildTypedCookie(Cookie.TELESCOPE_COOKIE_TYPE, unmaskedCookie, true);
     }
 
     private static Cookie buildTypedCookie(Long typeMask, Long unmaskedCookie, boolean forward) {

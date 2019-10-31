@@ -22,6 +22,7 @@ import org.openkilda.messaging.info.meter.MeterEntry;
 import org.openkilda.messaging.info.rule.FlowEntry;
 import org.openkilda.messaging.info.switches.MeterInfoEntry;
 import org.openkilda.messaging.info.switches.MeterMisconfiguredInfoEntry;
+import org.openkilda.model.ApplicationRule;
 import org.openkilda.model.Cookie;
 import org.openkilda.model.Flow;
 import org.openkilda.model.FlowApplication;
@@ -32,6 +33,7 @@ import org.openkilda.model.MeterId;
 import org.openkilda.model.Switch;
 import org.openkilda.model.SwitchId;
 import org.openkilda.persistence.PersistenceManager;
+import org.openkilda.persistence.repositories.ApplicationRepository;
 import org.openkilda.persistence.repositories.FlowPathRepository;
 import org.openkilda.wfm.topology.switchmanager.SwitchManagerTopologyConfig;
 import org.openkilda.wfm.topology.switchmanager.model.SimpleMeterEntry;
@@ -61,6 +63,7 @@ public class ValidationServiceImpl implements ValidationService {
     private static final double E_SWITCH_METER_BURST_SIZE_EQUALS_DELTA_COEFFICIENT = 0.01;
 
     private FlowPathRepository flowPathRepository;
+    private ApplicationRepository applicationRepository;
     private final long flowMeterMinBurstSizeInKbits;
     private final double flowMeterBurstCoefficient;
     private final int lldpRateLimit;
@@ -69,6 +72,7 @@ public class ValidationServiceImpl implements ValidationService {
 
     public ValidationServiceImpl(PersistenceManager persistenceManager, SwitchManagerTopologyConfig topologyConfig) {
         this.flowPathRepository = persistenceManager.getRepositoryFactory().createFlowPathRepository();
+        this.applicationRepository = persistenceManager.getRepositoryFactory().createApplicationRepository();
         this.flowMeterMinBurstSizeInKbits = topologyConfig.getFlowMeterMinBurstSizeInKbits();
         this.flowMeterBurstCoefficient = topologyConfig.getFlowMeterBurstCoefficient();
         this.lldpRateLimit = topologyConfig.getLldpRateLimit();
@@ -107,12 +111,17 @@ public class ValidationServiceImpl implements ValidationService {
                 .map(this::buildTelescopeCookie)
                 .forEach(expectedCookies::add);
 
+        applicationRepository.findBySwitchId(switchId).stream()
+                .map(ApplicationRule::getCookie)
+                .map(Cookie::getValue)
+                .forEach(expectedCookies::add);
+
         return makeRulesResponse(
                 expectedCookies, presentRules, expectedDefaultRules, switchId);
     }
 
     private long buildTelescopeCookie(Cookie flowCookie) {
-        return Cookie.buildTelescopeCookie(flowCookie.getUnmaskedValue(), true).getValue();
+        return Cookie.buildTelescopeCookie(flowCookie.getUnmaskedValue()).getValue();
     }
 
     @VisibleForTesting

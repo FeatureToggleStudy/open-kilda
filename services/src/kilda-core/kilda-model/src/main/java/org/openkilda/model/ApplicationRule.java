@@ -75,6 +75,9 @@ public class ApplicationRule {
     @Property("eth_type")
     private String ethType;
 
+    @Property("metadata")
+    private int metadata;
+
     @Property(name = "time_create")
     @Convert(InstantStringConverter.class)
     private Instant timeCreate;
@@ -84,7 +87,8 @@ public class ApplicationRule {
 
     @Builder(toBuilder = true)
     public ApplicationRule(String flowId, SwitchId switchId, Cookie cookie, String srcIp, int srcPort, String dstIp,
-                           int dstPort, String proto, String ethType, Instant timeCreate, int expirationTimeout) {
+                           int dstPort, String proto, String ethType, int metadata, Instant timeCreate,
+                           int expirationTimeout) {
         this.flowId = flowId;
         this.switchId = switchId;
         this.cookie = cookie;
@@ -94,6 +98,7 @@ public class ApplicationRule {
         this.dstPort = dstPort;
         this.proto = proto;
         this.ethType = ethType;
+        this.metadata = metadata;
         this.timeCreate = timeCreate;
         this.expirationTimeout = expirationTimeout;
     }
