@@ -179,6 +179,31 @@ public interface ISwitchManager extends IFloodlightService {
     long installEgressIslVlanRule(final DatapathId dpid, int port) throws SwitchOperationException;
 
     /**
+     * Install intermediate rule for isl on switch in table 0 to route egress in case of vlan.
+     *
+     * @param dpid datapathId of the switch
+     * @throws SwitchOperationException Switch not found
+     */
+    long installLldpTransitFlow(DatapathId dpid) throws SwitchOperationException;
+
+    /**
+     * Install intermediate rule for isl on switch in table 0 to route egress in case of vlan.
+     *
+     * @param dpid datapathId of the switch
+     * @param port isl port
+     * @throws SwitchOperationException Switch not found
+     */
+    long installLldpInputIslVlanFlow(DatapathId dpid, int port) throws SwitchOperationException;
+
+    /**
+     * Install intermediate rule for isl on switch in table 0 to route egress in case of vlan.
+     *
+     * @param dpid datapathId of the switch
+     * @throws SwitchOperationException Switch not found
+     */
+    long installLldpInputPreDropFlow(DatapathId dpid) throws SwitchOperationException;
+
+    /**
      * Remove intermediate rule for isl on switch in table 0 to route egress in case of vlan.
      *
      * @param dpid datapathId of the switch
@@ -198,6 +223,23 @@ public interface ISwitchManager extends IFloodlightService {
     long installIntermediateIngressRule(final DatapathId dpid, int port) throws SwitchOperationException;
 
     /**
+     * Install intermediate rule for isl on switch in table 0 to route ingress traffic.
+     *
+     * @param dpid datapathId of the switch
+     * @param port customer port
+     * @throws SwitchOperationException Switch not found
+     */
+    long installLldpInputCustomerFlow(DatapathId dpid, int port) throws SwitchOperationException;
+
+    /**
+     * Install intermediate rule for isl on switch in table 0 to route ingress traffic.
+     *
+     * @param dpid datapathId of the switch
+     * @throws SwitchOperationException Switch not found
+     */
+    long installLldpPostIngressFlow(DatapathId dpid) throws SwitchOperationException;
+
+    /**
      * Remove intermediate rule for isl on switch in table 0 to route ingress traffic.
      *
      * @param dpid datapathId of the switch
@@ -214,6 +256,25 @@ public interface ISwitchManager extends IFloodlightService {
      * @return modification command
      */
     OFFlowMod buildIntermediateIngressRule(DatapathId dpid, int port) throws SwitchNotFoundException;
+
+
+    /**
+     * Build intermidiate flowmod for ingress rule.
+     *
+     * @param dpid switch id
+     * @param port port
+     * @return modification command
+     */
+    OFFlowMod buildLldpInputCustomerFlow(DatapathId dpid, int port) throws SwitchNotFoundException;
+
+    /**
+     * Build intermidiate flowmod for ingress rule.
+     *
+     * @param dpid switch id
+     * @param port port
+     * @return modification command
+     */
+    OFFlowMod buildLldpInputIslVlanFlow(DatapathId dpid, int port) throws SwitchNotFoundException;
 
     /**
      * Install default pass through rule for pre ingress table.
@@ -367,7 +428,8 @@ public interface ISwitchManager extends IFloodlightService {
      * @param multiTable flag
      * @return list of default flows.
      */
-    List<OFFlowMod> getExpectedDefaultFlows(DatapathId dpid, boolean multiTable) throws SwitchOperationException;
+    List<OFFlowMod> getExpectedDefaultFlows(
+            DatapathId dpid, boolean multiTable, boolean switchLldp) throws SwitchOperationException;
 
 
     /**
@@ -478,11 +540,13 @@ public interface ISwitchManager extends IFloodlightService {
      * @param islPorts ports with isl default rule
      * @param flowPorts ports with flow default rule
      * @param multiTable multiTableMode
+     * @param multiTable switch Lldp enabled
      * @return the list of cookies for removed rules
      * @throws SwitchOperationException Switch not found
      */
     List<Long> deleteDefaultRules(DatapathId dpid, List<Integer> islPorts,
-                                  List<Integer> flowPorts, boolean multiTable) throws SwitchOperationException;
+                                  List<Integer> flowPorts, boolean multiTable,
+                                  boolean switchLldp) throws SwitchOperationException;
 
     /**
      * Delete rules that match the criteria.

@@ -186,8 +186,9 @@ public class SwitchValidateFsm
 
         carrier.sendCommandToSpeaker(key, new DumpRulesForSwitchManagerRequest(switchId));
         boolean multiTable = switchProperties.isMultiTable();
+        boolean switchLldp = switchProperties.isSwitchLldp();
 
-        carrier.sendCommandToSpeaker(key, new GetExpectedDefaultRulesRequest(switchId, multiTable, islPorts,
+        carrier.sendCommandToSpeaker(key, new GetExpectedDefaultRulesRequest(switchId, multiTable, switchLldp, islPorts,
                 flowPorts));
 
         if (processMeters) {

@@ -64,12 +64,20 @@ public class ConnectedDevicesService implements IService, IInputTranslator {
         return null;
     }
 
+    private boolean isLldpRelated(long value) {
+        return value == Cookie.LLDP_INPUT_PRE_DROP_COOKIE
+                || value == Cookie.LLDP_POST_INGRESS_COOKIE
+                || value == Cookie.LLDP_TRANSIT_COOKIE
+                || Cookie.isLldpFlow(value);
+    }
+
     private void handlePacketIn(OfInput input) {
         U64 rawCookie = input.packetInCookie();
 
-        if (rawCookie == null || !Cookie.isMaskedAsLldp(rawCookie.getValue())) {
+        if (rawCookie == null || !isLldpRelated(rawCookie.getValue())) {
             return;
         }
+        log(rawCookie.getValue());
 
         long cookie = rawCookie.getValue();
         SwitchId switchId = new SwitchId(input.getDpId().getLong());
@@ -121,5 +129,23 @@ public class ConnectedDevicesService implements IService, IInputTranslator {
 
         InputService inputService = context.getServiceImpl(InputService.class);
         inputService.addTranslator(OFType.PACKET_IN, this);
+    }
+
+    private void log(long cookie) {
+        if (Cookie.LLDP_TRANSIT_COOKIE == cookie) {
+            logger.error("GOT LLDP TRANSIT {}", Cookie.decode(cookie));
+        }
+        if (Cookie.isLldpInputCustomer(cookie)) {
+            logger.error("GOT LLDP INPUT CUSTOMER {}", Cookie.decode(cookie));
+        }
+        if (Cookie.LLDP_POST_INGRESS_COOKIE == cookie) {
+            logger.error("GOT LLDP POST INGRESS {}", Cookie.decode(cookie));
+        }
+        if (Cookie.isLldpInputIslVlan(cookie)) {
+            logger.error("GOT LLDP INPUT ISL VLAN {}", Cookie.decode(cookie));
+        }
+        if (Cookie.LLDP_INPUT_PRE_DROP_COOKIE == cookie) {
+            logger.error("GOT LLDP PRE DROP {}", Cookie.decode(cookie));
+        }
     }
 }
