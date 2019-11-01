@@ -58,6 +58,7 @@ class EnvExtension extends AbstractGlobalExtension implements SpringContextListe
     void notifyContextInitialized(ApplicationContext applicationContext) {
         applicationContext.autowireCapableBeanFactory.autowireBean(this)
         if (profile == "virtual") {
+            northbound.updateKildaConfiguration(new KildaConfigurationDto(useMultiTable: useMultitable))
             buildVirtualEnvironment()
             log.info("Virtual topology is successfully created")
         } else if (profile == "hardware") {
@@ -80,9 +81,6 @@ class EnvExtension extends AbstractGlobalExtension implements SpringContextListe
                 .floodlightRoutePeriodicSync(true)
                 .build()
         northbound.toggleFeature(features)
-
-        //TODO(andriidovhan) use it when kildaConfiguration is updated with multitable
-        //northbound.updateKildaConfiguration(new KildaConfigurationDto(multitable: useMultitable))
 
         labService.flushLabs()
         Wrappers.wait(WAIT_OFFSET) {

@@ -21,6 +21,7 @@ import org.openkilda.testing.service.traffexam.TraffExamService
 import org.openkilda.testing.tools.FlowTrafficExamBuilder
 
 import org.springframework.beans.factory.annotation.Autowired
+import spock.lang.Ignore
 
 import javax.inject.Provider
 
@@ -29,6 +30,7 @@ class MultitableFlowsSpec extends HealthCheckSpecification {
     @Autowired
     Provider<TraffExamService> traffExamProvider
 
+    @Ignore
     @Tags([SMOKE, SMOKE_SWITCHES])
     def "System can use both single-table and multi-table switches in flow path at the same time, change switch table \
 mode with existing flows and hold flows of different table-mode types"() {
